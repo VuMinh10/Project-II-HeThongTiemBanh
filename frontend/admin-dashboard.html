@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Tiệm Bánh Ngọt</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .sidebar { min-height: 100vh; background-color: #343a40; }
+        .sidebar a { color: #cfd8dc; text-decoration: none; padding: 15px; display: block; }
+        .sidebar a:hover, .sidebar a.active { background-color: #495057; color: #fff; }
+    </style>
+</head>
+<body class="bg-light">
+
+    <div class="d-flex">
+        <div class="sidebar text-white p-0" style="width: 250px;">
+            <h4 class="text-center py-4 mb-0 border-bottom border-secondary">🎂 Admin Panel</h4>
+            <a href="#" class="active"><i class="fas fa-tachometer-alt me-2"></i> Tổng quan</a>
+            <a href="#"><i class="fas fa-box me-2"></i> Quản lý Sản phẩm</a>
+            <a href="#"><i class="fas fa-shopping-cart me-2"></i> Đơn hàng</a>
+            <a href="#"><i class="fas fa-users me-2"></i> Khách hàng</a>
+            <a href="#" id="btnAdminLogout" class="mt-5 text-danger"><i class="fas fa-sign-out-alt me-2"></i> Đăng xuất</a>
+        </div>
+
+        <div class="flex-grow-1 p-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Tổng quan hệ thống</h2>
+                <div class="d-flex align-items-center">
+                    <img src="https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff" class="rounded-circle me-2" width="40" alt="Admin">
+                    <strong id="adminNameDisplay">Xin chào, ...!</strong> 
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card text-white bg-primary shadow">
+                        <div class="card-body">
+                            <h5 class="card-title">Đơn hàng hôm nay</h5>
+                            <h3 class="card-text" id="statOrders">--</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-white bg-success shadow">
+                        <div class="card-body">
+                            <h5 class="card-title">Doanh thu tuần</h5>
+                            <h3 class="card-text" id="statRevenue">--</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-white bg-warning shadow text-dark">
+                        <div class="card-body">
+                            <h5 class="card-title">Khách hàng mới</h5>
+                            <h3 class="card-text" id="statNewUsers">--</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card text-white bg-danger shadow">
+                        <div class="card-body">
+                            <h5 class="card-title">Sắp hết hạn</h5>
+                            <h3 class="card-text" id="statWarnings">--</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Biểu đồ doanh thu 7 ngày qua</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="revenueChart" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Phần bảo mật
+            /*
+            const token = localStorage.getItem('token');
+            const userInfoRaw = localStorage.getItem('userInfo');
+
+            if (!token || !userInfoRaw) {
+                window.location.replace('/login.html');
+                return;
+            }
+
+            const userInfo = JSON.parse(userInfoRaw);
+            if (userInfo.roleId !== 2) {
+                alert('Truy cập bị từ chối: Bạn không có quyền quản trị viên!');
+                window.location.replace('/trangchu.html');
+                return;
+            }
+            document.getElementById('adminNameDisplay').innerText = `Xin chào, ${userInfo.fullName}!`;
+            */
+
+            // Dữ liệu giả lập để trưng bày
+            const mockData = {
+                orders: 28,
+                revenue: 16500000,
+                newUsers: 12,
+                warnings: 3,
+                chartLabels: ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'],
+                chartData: [1500000, 2100000, 1800000, 2900000, 3200000, 4500000, 5100000]
+            };
+
+            // Đổ dữ liệu vào giao diện
+            document.getElementById('statOrders').innerText = mockData.orders;
+            document.getElementById('statRevenue').innerText = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(mockData.revenue);
+            document.getElementById('statNewUsers').innerText = mockData.newUsers;
+            document.getElementById('statWarnings').innerText = mockData.warnings;
+
+            // Biểu đồ
+            const ctx = document.getElementById('revenueChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: mockData.chartLabels,
+                    datasets: [{
+                        label: 'Doanh thu',
+                        data: mockData.chartData,
+                        borderColor: '#0d6efd',
+                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } }
+                }
+            });
+        });
+
+        // Nút đăng xuất tạm thời chỉ báo alert vì chỉ đang trưng bày
+        document.getElementById('btnAdminLogout').addEventListener('click', (e) => {
+            e.preventDefault();
+            alert('Bạn vừa bấm Đăng xuất! (Tính năng này đang tắt ở chế độ trưng bày)');
+        });
+    </script>
+</body>
+</html>

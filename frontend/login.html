@@ -1,0 +1,81 @@
+<!DOCTYPE html> //XXX
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng nhập - Tiệm Bánh Ngọt</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light d-flex align-items-center justify-content-center" style="height: 100vh;">
+
+    <div class="card shadow p-4" style="width: 400px; border-radius: 15px;">
+        <h3 class="text-center text-primary mb-4">🎂 Tiệm Bánh</h3>
+        
+        <div id="errorAlert" class="alert alert-danger d-none" role="alert"></div>
+
+        <form id="loginForm">
+            <div class="mb-3">
+                <label class="form-label">Tài khoản</label>
+                <input type="text" class="form-control" id="username" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Mật khẩu</label>
+                <input type="password" class="form-control" id="password" required>
+            </div>
+            
+            <button type="submit" id="btnLogin" class="btn btn-primary w-100">Đăng Nhập</button>
+        </form>
+
+        <div class="text-center mt-3">
+            <a href="#" class="text-decoration-none">Chưa có tài khoản? Đăng ký ngay</a>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const btnLogin = document.getElementById('btnLogin');
+            const errorAlert = document.getElementById('errorAlert');
+
+            // Reset trạng thái UI
+            errorAlert.classList.add('d-none');
+            btnLogin.disabled = true;
+            btnLogin.innerText = 'Đang xử lý...';
+
+            try {
+                const response = await fetch('http://localhost:3000/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    // Chữ thường chuẩn chỉnh khớp với Backend
+                    body: JSON.stringify({ username, password }) 
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Đăng nhập thất bại');
+                }
+
+                // Thành công
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('userInfo', JSON.stringify(data.user));
+                
+                // Chuyển hướng
+                window.location.href = '/trangchu.html'; 
+
+            } catch (error) {
+                // Hiển thị lỗi ra giao diện
+                errorAlert.innerText = error.message;
+                errorAlert.classList.remove('d-none');
+            } finally {
+                // Trả lại trạng thái cho nút bấm
+                btnLogin.disabled = false;
+                btnLogin.innerText = 'Đăng Nhập';
+            }
+        });
+    </script>
+</body>
+</html>
