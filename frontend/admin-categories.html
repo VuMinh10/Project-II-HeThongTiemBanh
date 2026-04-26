@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý Danh mục - Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-light" style="display: none;"> <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Quản lý Danh mục Sản phẩm</h2>
+            <button class="btn btn-primary" id="btnOpenAddModal">
+                <i class="fas fa-plus"></i> Thêm Danh Mục Mới
+            </button>
+        </div>
+
+        <div id="mainAlert" class="alert d-none" role="alert"></div>
+
+        <div class="card shadow">
+            <div class="card-body">
+                <table class="table table-hover align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th width="10%">ID</th>
+                            <th width="30%">Tên Danh Mục</th>
+                            <th width="40%">Mô Tả</th>
+                            <th width="20%">Hành Động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="categoryTableBody">
+                        <tr><td colspan="4" class="text-center">Đang tải dữ liệu...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="categoryModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="modalTitle">Thêm Danh Mục Mới</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="categoryForm">
+                        <div class="mb-3">
+                            <label class="form-label">Tên Danh Mục</label>
+                            <input type="text" class="form-control" id="categoryName" required placeholder="VD: Bánh Kem Mousse">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Mô tả thêm</label>
+                            <textarea class="form-control" id="description" rows="3" placeholder="Mô tả về loại bánh này..."></textarea>
+                        </div>
+                        <div class="text-end mt-3">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                            <button type="submit" id="btnSave" class="btn btn-success"><i class="fas fa-save"></i> Lưu Lại</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        const token = localStorage.getItem('token');
+        let currentCategories = []; 
+        let editingId = null; 
+        let modal;
+
+        function showAlert(message, type = 'success') {
+            const alertBox = document.getElementById('mainAlert');
+            alertBox.className = `alert alert-${type}`;
+            alertBox.innerText = message;
+            alertBox.classList.remove('d-none');
+            setTimeout(() => alertBox.classList.add('d-none'), 3000);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Kiểm tra token
+            if (!token) {
+                window.location.replace('/login.html');
+                return;
+            }
+            document.body.style.display = 'block';
+            modal = new bootstrap.Modal(document.getElementById('categoryModal'));
+            loadCategories();
+        });
+
+        // Tải danh sách danh mục
+        async function loadCategories() {
+            try {
+                const response = await fetch('http://localhost:3000/api/categories');
+                currentCategories = await response.json();
+                
+                const tbody = document.getElementById('categoryTableBody');
+                tbody.innerHTML = ''; 
+                
+                if (currentCategories.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="text-center">Chưa có danh mục nào.</td></tr>';
+                    return;
+                }
+
+                currentCategories.forEach(c => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><strong>#${c.CategoryID}</strong></td>
+                        <td class="text-primary fw-bold">${c.CategoryName}</td>
+                        <td>${c.Description || '<span class="text-muted">Không có</span>'}</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="openEditForm(${c.CategoryID})"><i class="fas fa-edit"></i></button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteCategory(${c.CategoryID})"><i class="fas fa-trash"></i></button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+            } catch (error) {
+                showAlert('Không thể kết nối đến máy chủ tải danh mục.', 'danger');
+            }
+        }
+
+        // Mở form thêm mới
+        document.getElementById('btnOpenAddModal').addEventListener('click', () => {
+            editingId = null;
+            document.getElementById('categoryForm').reset();
+            document.getElementById('modalTitle').innerText = 'Thêm Danh Mục Mới';
+            modal.show();
+        });
+
+        // Mở form sửa
+        window.openEditForm = function(id) {
+            editingId = id;
+            const c = currentCategories.find(item => item.CategoryID === id); 
+            
+            document.getElementById('categoryName').value = c.CategoryName;
+            document.getElementById('description').value = c.Description || '';
+            document.getElementById('modalTitle').innerText = 'Sửa Danh Mục #' + id;
+            modal.show();
+        }
+
+        // Xử lý lưu
+        document.getElementById('categoryForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const btnSave = document.getElementById('btnSave');
+            btnSave.disabled = true;
+            btnSave.innerText = 'Đang xử lý...';
+            
+            const payload = {
+                categoryName: document.getElementById('categoryName').value,
+                description: document.getElementById('description').value
+            };
+
+            try {
+                const url = editingId 
+                    ? `http://localhost:3000/api/categories/${editingId}` 
+                    : 'http://localhost:3000/api/categories';
+                
+                const method = editingId ? 'PUT' : 'POST';
+
+                const response = await fetch(url, {
+                    method: method,
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}` 
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Lỗi hệ thống');
+
+                showAlert(editingId ? 'Cập nhật thành công!' : 'Thêm danh mục thành công!');
+                modal.hide();
+                loadCategories();
+            } catch (error) {
+                showAlert(error.message, 'danger');
+            } finally {
+                btnSave.disabled = false;
+                btnSave.innerHTML = '<i class="fas fa-save"></i> Lưu Lại';
+            }
+        });
+
+        // Xóa danh mục kèm token
+        window.deleteCategory = async function(id) {
+            if (!confirm('Bạn có chắc chắn muốn xóa danh mục này?')) return;
+            
+            try {
+                const response = await fetch(`http://localhost:3000/api/categories/${id}`, { 
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` } // quan trọng
+                });
+                
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error);
+
+                showAlert('Đã xóa danh mục thành công!');
+                loadCategories(); 
+            } catch (error) {
+                // Lỗi nếu danh mục đang chứa bánh
+                showAlert(error.message, 'danger'); 
+            }
+        }
+    </script>
+</body>
+</html>
