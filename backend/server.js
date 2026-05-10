@@ -5,11 +5,20 @@ const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
+/--------/
+const path = require('path'); // Gọi thư viện đường dẫn
+/--------/
+
 const app = express();
+
 // Mỗi khi có request thì phải đi qua trạm gac use()
 app.use(cors()); // Chạm gác đầu tiên cors() kiểm tra
 app.use(express.json()); /* Chạm thứ 2 kiểm tra xem dl gửi lên có phải json ko và nếu đúng 
 chuyển thành object để mình đọc được */
+
+/--------/
+app.use(express.static(path.join(__dirname, '../frontend')));
+/--------/
 
 // -- Chuẩn bị đường ống kết nối database --
 const pool = mysql.createPool({
@@ -206,7 +215,7 @@ app.post('/api/categories', authenticateToken, isAdmin, async(req, res) => {
         const {categoryName, description} = req.body; // Chuẩn hóa chữ thường
 
         if(!categoryName || categoryName.trim() === ''){ // trim() xóa dấu cách đầu cuối
-            res.status(400).json({error: 'Tên danh mục không được để trống.'});
+            return res.status(400).json({error: 'Tên danh mục không được để trống.'});
         }
 
         const sql = 'INSERT INTO Category (CategoryName, Description) VALUES (?, ?)';
@@ -399,6 +408,27 @@ app.delete('/api/products/:id', authenticateToken, isAdmin, async (req, res) => 
     }
 });
 
+// 5. Lấy chi tiết 1 sản phẩm cụ thể (Dùng cho product-detail)
+app.get('/api/products/:id', async (req, res) => {
+    try {
+        const sql = `
+            SELECT p.*, c.CategoryName 
+            FROM Product p 
+            LEFT JOIN Category c ON p.CategoryID = c.CategoryID
+            WHERE p.ProductID = ?
+        `;
+        const [products] = await pool.execute(sql, [req.params.id]);
+        
+        if (products.length === 0) {
+            return res.status(404).json({ error: 'Không tìm thấy sản phẩm này!' });
+        }
+        // Trả về đúng 1 cái bánh đầu tiên tìm được
+        res.json(products[0]); 
+    } catch (error) {
+        res.status(500).json({ error: 'Lỗi khi lấy chi tiết sản phẩm' });
+    }
+});
+
 // -- API tạo nhân viên -- (XXX)
 app.post('/api/admin/employees', authenticateToken, isAdmin, async (req, res) => {
     const {username, password, fullName, position, hireDate} = req.body;
@@ -416,7 +446,7 @@ app.post('/api/admin/employees', authenticateToken, isAdmin, async (req, res) =>
     const connection = await pool.getConnection();
 
     try {
-        await connection.beginTransaction();
+        await connection.beginTransaction(); // Đảm bảo tất cả lệnh thành công, nếu ko thì hủy hết
 
         const hashedPassword = await bcrypt.hash(password, 10);
         const roleId = 3; // nhân viên
@@ -433,8 +463,8 @@ app.post('/api/admin/employees', authenticateToken, isAdmin, async (req, res) =>
         
         await connection.execute(sqlEmployee, [newUserId, position, effectiveHireDate]);
 
-        // Bước 3
-        await connection.commit();
+        // Bước 3: Xác nhận lưu toàn bộ
+        await connection.commit(); // Kết thúc vùng "Đảm bảo tất cả lệnh thành công, nếu ko thì hủy hết"
         res.status(201).json({message: 'Tạo hồ sơ nhân viên thành công!', employeeId: newUserId});
 
     } catch (error) {
@@ -449,6 +479,64 @@ app.post('/api/admin/employees', authenticateToken, isAdmin, async (req, res) =>
 
     } finally {
         connection.release();
+    }
+});
+
+
+// --- API cho profile ---
+// 1. Xem thông tin hồ sơ (XXX)
+app.get('/api/profile', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId; 
+
+        const sql = 'SELECT UserID, Username, FullName, Phone, Email, RoleID FROM User WHERE UserID = ?';
+        const [users] = await pool.execute(sql, [userId]);
+        
+        if (users.length === 0) {
+            return res.status(404).json({ error: 'Không tìm thấy hồ sơ người dùng!' });
+        }
+        
+        res.status(200).json({
+            message: 'Lấy thông tin thành công',
+            profile: users[0]
+        });
+    } catch (error) {
+        console.error('[GET Profile Error]:', error);
+        res.status(500).json({ error: 'Lỗi máy chủ nội bộ khi lấy thông tin cá nhân.' });
+    }
+});
+
+// 2. Cập nhật thông tin hồ sơ (XXX)
+app.put('/api/profile', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId; 
+        const { FullName, Phone, Email } = req.body;
+
+        // Kiểm tra dữ liệu đầu vào
+        if (!FullName || FullName.trim() === '' || !Email || Email.trim() === '') {
+            return res.status(400).json({ error: 'Họ tên và Email không được để trống.' });
+        }
+
+        // Thực hiện cập nhật
+        const sql = 'UPDATE User SET FullName = ?, Phone = ?, Email = ? WHERE UserID = ?';
+        const [result] = await pool.execute(sql, [FullName.trim(), Phone || null, Email.trim(), userId]);
+        
+        // Kiểm tra xem có thực sự sửa được dòng nào không
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Không tìm thấy tài khoản để cập nhật.' });
+        }
+        
+        res.status(200).json({ message: 'Cập nhật hồ sơ cá nhân thành công!' });
+
+    } catch (error) {
+        console.error('[PUT Profile Error]:', error);
+        
+        // Bắt lỗi nếu khách nhập Email trùng với người khác
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ error: 'Email này đã được sử dụng bởi tài khoản khác.' });
+        }
+
+        res.status(500).json({ error: 'Lỗi máy chủ nội bộ khi cập nhật thông tin.' });
     }
 });
 

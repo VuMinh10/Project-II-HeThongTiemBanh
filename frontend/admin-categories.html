@@ -8,6 +8,9 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body class="bg-light" style="display: none;"> <div class="container mt-4">
+        <a href="admin-dashboard.html" class="text-decoration-none text-secondary mb-3 d-inline-block custom-back-btn">
+            <i class="fas fa-arrow-left me-1"></i> Quay lại Bảng điều khiển
+        </a>
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2>Quản lý Danh mục Sản phẩm</h2>
             <button class="btn btn-primary" id="btnOpenAddModal">
@@ -66,7 +69,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
     <script>
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('bakery_token');
         let currentCategories = []; 
         let editingId = null; 
         let modal;

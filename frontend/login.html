@@ -27,7 +27,7 @@
         </form>
 
         <div class="text-center mt-3">
-            <a href="#" class="text-decoration-none">Chưa có tài khoản? Đăng ký ngay</a>
+            <a href="register.html" class="text-decoration-none">Chưa có tài khoản? Đăng ký ngay</a>
         </div>
     </div>
 
@@ -60,11 +60,11 @@
                 }
 
                 // Thành công
-                localStorage.setItem('token', data.token);
-                localStorage.setItem('userInfo', JSON.stringify(data.user));
+                localStorage.setItem('bakery_token', data.token);
+                localStorage.setItem('bakery_user', JSON.stringify(data.user));
                 
                 // Chuyển hướng
-                window.location.href = '/trangchu.html'; 
+                window.location.href = 'index.html'; 
 
             } catch (error) {
                 // Hiển thị lỗi ra giao diện

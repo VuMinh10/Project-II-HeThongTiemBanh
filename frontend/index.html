@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tiệm Bánh Ngọt - Trang Chủ</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .product-card {
+            transition: transform 0.3s;
+            border: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .product-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+        }
+        .product-img {
+            height: 200px;
+            object-fit: cover;
+            border-top-left-radius: calc(.25rem - 1px);
+            border-top-right-radius: calc(.25rem - 1px);
+        }
+        .hero-banner {
+            background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url('https://images.unsplash.com/photo-1509440159596-0249088772ff?w=1920&q=80&fit=crop') center/cover;
+            color: white;
+            padding: 100px 0;
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="bg-light">
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold " style="color: #FF69B4;" href="index.html">SweetBakery</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link active" href="index.html">Trang chủ</a></li>
+                    <li class="nav-item"><a class="nav-link" href="#">Thực đơn</a></li>
+                </ul>
+                <div class="d-flex align-items-center" id="authSection">
+                    <a href="cart.html" class="btn btn-outline-dark position-relative me-3">
+                        <i class="fas fa-shopping-cart"></i> Giỏ hàng
+                        <span id="cartBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                            0
+                        </span>
+                    </a>
+                    <a href="login.html" class="btn btn-primary" id="btnLogin">Đăng nhập</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Banner -->
+    <div class="hero-banner mb-5">
+        <div class="container">
+            <h1 class="display-4 fw-bold">Bánh Ngọt Làm Trong Ngày</h1>
+            <p class="lead">Hương vị hoàn hảo cho mọi dịp đặc biệt của bạn.</p>
+        </div>
+    </div>
+
+    <!-- Danh sách Sản phẩm -->
+    <div class="container mb-5">
+        <!-- ĐÃ ĐƯỢC NÂNG CẤP THANH TÌM KIẾM Ở ĐÂY -->
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+            <h2 class="fw-bold mb-0">Khám phá Thực đơn</h2>
+            <div class="d-flex gap-2 w-100" style="max-width: 500px;">
+                <select id="categoryFilter" class="form-select" onchange="filterProducts()">
+                    <option value="ALL">Tất cả danh mục</option>
+                    <!-- JS sẽ tự động đổ danh mục vào đây -->
+                </select>
+                <input type="text" id="searchInput" class="form-control" placeholder="🔍 Tìm tên bánh..." oninput="filterProducts()">
+            </div>
+        </div>
+
+        <div class="row" id="productList">
+            <div class="text-center mt-5">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p>Đang tải danh sách bánh...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Thông báo -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="cartToast" class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body fw-bold" id="toastMessage">
+                    <!-- Text sẽ được chèn bằng JS -->
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tải Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Logic Xử lý -->
+    <script>
+        // 1. Biến toàn cục
+        let cart = JSON.parse(localStorage.getItem('bakery_cart')) || [];
+        let allProducts = []; // Lưu trữ danh sách bánh gốc
+
+        updateCartBadge();
+
+        // 2. Tải danh mục vào Dropdown
+        async function loadCategories() {
+            try {
+                const res = await fetch('http://localhost:3000/api/categories');
+                const categories = await res.json();
+                const select = document.getElementById('categoryFilter');
+                
+                categories.forEach(c => {
+                    const option = document.createElement('option');
+                    option.value = c.CategoryName;
+                    option.textContent = c.CategoryName;
+                    select.appendChild(option);
+                });
+            } catch (error) { console.error('Lỗi tải danh mục', error); }
+        }
+
+        // 3. Tải toàn bộ sản phẩm
+        async function loadProducts() {
+            try {
+                const response = await fetch('http://localhost:3000/api/products');
+                allProducts = await response.json(); 
+                renderProducts(allProducts); 
+            } catch (error) {
+                document.getElementById('productList').innerHTML = '<p class="text-danger text-center">Không thể kết nối đến máy chủ.</p>';
+            }
+        }
+
+        // 4. Máy vẽ Giao diện 
+        function renderProducts(productsToRender) {
+            const productList = document.getElementById('productList');
+            productList.innerHTML = ''; 
+            
+            if (productsToRender.length === 0) {
+                productList.innerHTML = '<div class="col-12 text-center text-muted mt-4"><h5>Không tìm thấy chiếc bánh nào phù hợp 😢</h5></div>';
+                return;
+            }
+
+            productsToRender.forEach(p => {
+                if(p.Status === 'Ngừng bán') return; 
+
+                const isOutOfStock = p.Status === 'Hết hàng' || p.QuantityAvailable === 0;
+                
+                const btnHtml = isOutOfStock 
+                    ? `<button class="btn btn-secondary w-100" disabled>Đã hết hàng</button>`
+                    : `<button class="btn btn-primary w-100" onclick="addToCart(${p.ProductID})">
+                        <i class="fas fa-cart-plus"></i> Thêm vào giỏ
+                    </button>`;
+
+                const card = document.createElement('div');
+                card.className = 'col-md-3 mb-4';
+                card.innerHTML = `
+                    <div class="card product-card h-100">
+                        <a href="product-detail.html?id=${p.ProductID}">
+                            <img src="${p.ImageURL || 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=500'}" class="card-img-top product-img" alt="${p.ProductName}">
+                        </a>
+                        <div class="card-body d-flex flex-column">
+                            <a href="product-detail.html?id=${p.ProductID}" class="text-decoration-none text-dark">
+                                <h5 class="card-title fw-bold text-truncate" title="${p.ProductName}">${p.ProductName}</h5>
+                            </a>
+                            <p class="text-muted small mb-2">${p.CategoryName || 'Bánh ngọt'}</p>
+                            <p class="text-danger fw-bold fs-5 mb-3">${Number(p.Price).toLocaleString('vi-VN')} ₫</p>
+                            <div class="mt-auto">
+                                ${btnHtml}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                productList.appendChild(card);
+            });
+        }
+
+        // 5. Hàm tìm kiếm và lọc
+        function filterProducts() {
+            const keyword = document.getElementById('searchInput').value.toLowerCase().trim();
+            const selectedCategory = document.getElementById('categoryFilter').value;
+
+            let filtered = allProducts;
+
+            if (selectedCategory !== 'ALL') {
+                filtered = filtered.filter(p => p.CategoryName === selectedCategory);
+            }
+
+            if (keyword !== '') {
+                filtered = filtered.filter(p => p.ProductName.toLowerCase().includes(keyword));
+            }
+
+            renderProducts(filtered); 
+        }
+
+        // 6. Hàm thêm vào giỏ (Xử lý Toast và giới hạn tồn kho)
+        function addToCart(productId) {
+            const product = allProducts.find(p => p.ProductID === productId);
+            if (!product) return;
+
+            const existingItem = cart.find(item => item.ProductID === product.ProductID);
+            
+            if (existingItem) {
+                if (existingItem.quantity >= product.QuantityAvailable) {
+                    showToast(`Chỉ còn tối đa ${product.QuantityAvailable} sản phẩm trong kho!`, 'bg-warning text-dark');
+                    return;
+                }
+                existingItem.quantity += 1;
+            } else {
+                cart.push({
+                    ProductID: product.ProductID,
+                    ProductName: product.ProductName,
+                    Price: product.Price,
+                    ImageURL: product.ImageURL,
+                    quantity: 1
+                });
+            }
+
+            localStorage.setItem('bakery_cart', JSON.stringify(cart));
+            updateCartBadge();
+            showToast(`Đã thêm ${product.ProductName} vào giỏ hàng!`, 'bg-success text-white');
+        }
+
+        // 7. Cập nhật Badge
+        function updateCartBadge() {
+            const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+            document.getElementById('cartBadge').innerText = totalItems;
+        }
+
+        // 8. Hàm Toast 
+        function showToast(message, colorClass) {
+            const toastEl = document.getElementById('cartToast');
+            const toastMessage = document.getElementById('toastMessage');
+            
+            toastEl.className = `toast align-items-center border-0 ${colorClass}`;
+            toastMessage.innerText = message;
+            
+            const toast = new bootstrap.Toast(toastEl);
+            toast.show();
+        }
+
+        // Khởi động
+        loadCategories();
+        loadProducts();
+        
+        // 9. Hàm cập nhật Giao diện Đăng nhập / Đăng xuất
+        function checkLoginState() {
+            const userJson = localStorage.getItem('bakery_user');
+            const authSection = document.getElementById('authSection');
+            const btnLogin = document.getElementById('btnLogin');
+
+            if (userJson) {
+                // Nếu đã đăng nhập
+                const user = JSON.parse(userJson);
+                
+                // Giấu nút Đăng nhập đi
+                if(btnLogin) btnLogin.style.display = 'none';
+
+                // Vẽ Dropdown Menu tên người dùng
+                let userMenuHtml = `
+                    <div class="dropdown">
+                        <button class="btn btn-light dropdown-toggle fw-bold" type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user-circle text-primary me-1"></i> Chào, ${user.fullName}
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                `;
+
+                // Nếu là Admin (RoleID = 2) thì hiện nút Trang Quản Trị
+                if (user.roleId === 2) {
+                    userMenuHtml += `<li><a class="dropdown-item text-primary fw-bold" href="admin-dashboard.html"><i class="fas fa-cogs me-2"></i>Trang Quản Trị</a></li>
+                                     <li><hr class="dropdown-divider"></li>`;
+                }
+
+                userMenuHtml += `
+                            <li><a class="dropdown-item" href="profile.html"><i class="fas fa-user me-2"></i>Thông tin cá nhân</a></li>
+                            <li><a class="dropdown-item" href="#"><i class="fas fa-receipt me-2"></i>Đơn hàng của tôi</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="#" onclick="logout()"><i class="fas fa-sign-out-alt me-2"></i>Đăng xuất</a></li>
+                        </ul>
+                    </div>
+                `;
+
+                // Chèn Menu vào cạnh nút Giỏ hàng
+                authSection.insertAdjacentHTML('beforeend', userMenuHtml);
+            }
+        }
+
+        // 10. Hàm Đăng xuất
+        function logout() {
+            localStorage.removeItem('bakery_token');
+            localStorage.removeItem('bakery_user');
+            window.location.reload(); // Tải lại trang
+        }
+
+        // Chạy hàm kiểm tra ngay khi vừa vào trang
+        checkLoginState();
+    </script>
+</body>
+</html>

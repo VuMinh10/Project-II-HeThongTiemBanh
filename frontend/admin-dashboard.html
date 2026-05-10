@@ -16,11 +16,13 @@
 
     <div class="d-flex">
         <div class="sidebar text-white p-0" style="width: 250px;">
-            <h4 class="text-center py-4 mb-0 border-bottom border-secondary">🎂 Admin Panel</h4>
+            <h4 class="text-center py-4 mb-0 border-bottom border-secondary">Admin Panel</h4>
             <a href="#" class="active"><i class="fas fa-tachometer-alt me-2"></i> Tổng quan</a>
-            <a href="#"><i class="fas fa-box me-2"></i> Quản lý Sản phẩm</a>
+            <a href="admin-products.html"><i class="fas fa-box me-2"></i> Quản lý Sản phẩm</a>
+            <a href="admin-categories.html"><i class="fas fa-tags me-2"></i> Quản lý Danh mục</a>
             <a href="#"><i class="fas fa-shopping-cart me-2"></i> Đơn hàng</a>
             <a href="#"><i class="fas fa-users me-2"></i> Khách hàng</a>
+            <a href="index.html"><i class="fas fa-store me-2"></i> Xem Cửa hàng</a>
             <a href="#" id="btnAdminLogout" class="mt-5 text-danger"><i class="fas fa-sign-out-alt me-2"></i> Đăng xuất</a>
         </div>
 
@@ -29,7 +31,7 @@
                 <h2>Tổng quan hệ thống</h2>
                 <div class="d-flex align-items-center">
                     <img src="https://ui-avatars.com/api/?name=Admin&background=0D8ABC&color=fff" class="rounded-circle me-2" width="40" alt="Admin">
-                    <strong id="adminNameDisplay">Xin chào, ...!</strong> 
+                    <strong id="adminNameDisplay">Xin chào, Admin!</strong> 
                 </div>
             </div>
 
@@ -83,9 +85,8 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             // Phần bảo mật
-            /*
-            const token = localStorage.getItem('token');
-            const userInfoRaw = localStorage.getItem('userInfo');
+            const token = localStorage.getItem('bakery_token');
+            const userInfoRaw = localStorage.getItem('bakery_user');
 
             if (!token || !userInfoRaw) {
                 window.location.replace('/login.html');
@@ -95,11 +96,10 @@
             const userInfo = JSON.parse(userInfoRaw);
             if (userInfo.roleId !== 2) {
                 alert('Truy cập bị từ chối: Bạn không có quyền quản trị viên!');
-                window.location.replace('/trangchu.html');
+                window.location.replace('/index.html');
                 return;
             }
             document.getElementById('adminNameDisplay').innerText = `Xin chào, ${userInfo.fullName}!`;
-            */
 
             // Dữ liệu giả lập để trưng bày
             const mockData = {
@@ -140,10 +140,16 @@
             });
         });
 
-        // Nút đăng xuất tạm thời chỉ báo alert vì chỉ đang trưng bày
+        // Nút đăng xuất
         document.getElementById('btnAdminLogout').addEventListener('click', (e) => {
             e.preventDefault();
-            alert('Bạn vừa bấm Đăng xuất! (Tính năng này đang tắt ở chế độ trưng bày)');
+            if(confirm('Bạn có chắc chắn muốn đăng xuất khỏi trang quản trị?')) {
+                // Xóa sạch bộ nhớ
+                localStorage.removeItem('bakery_token');
+                localStorage.removeItem('bakery_user');
+                // Chuyển thẳng ra trang đăng nhập
+                window.location.replace('login.html');
+            }
         });
     </script>
 </body>

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chi tiết Bánh - SweetBakery</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold" style="color: #FF69B4;" href="index.html">SweetBakery</a>
+            <div class="d-flex align-items-center ms-auto">
+                <a href="cart.html" class="btn btn-outline-dark position-relative me-3">
+                    <i class="fas fa-shopping-cart"></i> Giỏ hàng
+                    <span id="cartBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">0</span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-5 mb-5">
+        <a href="index.html" class="text-decoration-none text-secondary mb-4 d-inline-block">
+            <i class="fas fa-arrow-left"></i> Quay lại thực đơn
+        </a>
+
+        <div class="card shadow border-0" id="detailContainer">
+            <div class="row g-0">
+                <div class="col-md-5">
+                    <img id="detailImg" src="" class="img-fluid rounded-start h-100" style="object-fit: cover; min-height: 400px;" alt="Hình ảnh bánh">
+                </div>
+                
+                <div class="col-md-7">
+                    <div class="card-body p-5">
+                        <span id="detailCategory" class="badge bg-secondary mb-2">Danh mục</span>
+                        <span id="preOrderBadge" class="badge bg-warning text-dark mb-2 d-none">Hàng đặt trước</span>
+                        
+                        <h2 id="detailName" class="fw-bold mb-3">Đang tải...</h2>
+                        <h3 id="detailPrice" class="text-danger fw-bold mb-4">0 ₫</h3>
+                        
+                        <div class="mb-4">
+                            <h5>Mô tả chi tiết:</h5>
+                            <p id="detailDesc" class="text-muted" style="line-height: 1.8;">Đang tải thông tin sản phẩm...</p>
+                        </div>
+
+                        <div class="mb-4 bg-light p-3 rounded">
+                            <p class="mb-2"><strong>Tình trạng:</strong> <span id="detailStatus" class="badge bg-success">Còn bán</span></p>
+                            <p class="mb-0"><strong>Kho còn:</strong> <span id="detailStock" class="fw-bold text-primary">0</span> chiếc</p>
+                        </div>
+
+                        <div class="d-flex align-items-center mb-4" style="max-width: 250px;">
+                            <label class="me-3 fw-bold">Số lượng:</label>
+                            <div class="input-group">
+                                <button class="btn btn-outline-secondary" onclick="changeQty(-1)">-</button>
+                                <input type="number" id="buyQty" class="form-control text-center bg-white" value="1" min="1" readonly>
+                                <button class="btn btn-outline-secondary" onclick="changeQty(1)">+</button>
+                            </div>
+                        </div>
+
+                        <button id="btnAddToCart" class="btn btn-primary btn-lg w-100 fw-bold py-3">
+                            <i class="fas fa-cart-plus me-2"></i> THÊM VÀO GIỎ HÀNG
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Thông báo -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="cartToast" class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body fw-bold" id="toastMessage">
+                    <!-- Text chèn bằng JS -->
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        let currentProduct = null;
+        let cart = JSON.parse(localStorage.getItem('bakery_cart')) || [];
+        updateCartBadge();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const productId = urlParams.get('id');
+
+        async function loadProductDetail() {
+            if (!productId) {
+                window.location.replace('index.html');
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://localhost:3000/api/products/${productId}`);
+                if (!response.ok) throw new Error('Không tìm thấy bánh');
+                
+                currentProduct = await response.json();
+                renderDetail(currentProduct);
+            } catch (error) {
+                document.getElementById('detailContainer').innerHTML = `
+                    <div class="p-5 text-center text-muted">
+                        <i class="fas fa-search-minus fa-4x mb-3"></i>
+                        <h4>Sản phẩm không tồn tại hoặc đã bị xóa!</h4>
+                        <a href="index.html" class="btn btn-primary mt-3">Về Trang chủ</a>
+                    </div>`;
+            }
+        }
+
+        function renderDetail(p) {
+            document.getElementById('detailImg').src = p.ImageURL || 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=500';
+            document.getElementById('detailName').innerText = p.ProductName;
+            document.getElementById('detailCategory').innerText = p.CategoryName || 'Khác';
+            document.getElementById('detailPrice').innerText = Number(p.Price).toLocaleString('vi-VN') + ' ₫';
+            document.getElementById('detailDesc').innerText = p.Description || 'Chưa có mô tả cho sản phẩm này.';
+            
+            document.getElementById('detailStock').innerText = p.QuantityAvailable;
+            
+            if (p.IsPreOrder === 1) document.getElementById('preOrderBadge').classList.remove('d-none');
+
+            const statusEl = document.getElementById('detailStatus');
+            const btnAdd = document.getElementById('btnAddToCart');
+            statusEl.innerText = p.Status;
+            
+            if (p.Status === 'Hết hàng' || p.QuantityAvailable <= 0) {
+                statusEl.className = 'badge bg-danger';
+                btnAdd.disabled = true;
+                btnAdd.innerHTML = '<i class="fas fa-times-circle me-2"></i> ĐÃ HẾT HÀNG';
+                btnAdd.className = 'btn btn-secondary btn-lg w-100 fw-bold py-3';
+            } else if (p.Status === 'Ngừng bán') {
+                statusEl.className = 'badge bg-dark';
+                btnAdd.disabled = true;
+                btnAdd.innerText = 'NGỪNG KINH DOANH';
+            } else {
+                statusEl.className = 'badge bg-success';
+            }
+        }
+
+        function changeQty(amount) {
+            const input = document.getElementById('buyQty');
+            let current = parseInt(input.value);
+            let newVal = current + amount;
+            if (newVal < 1) newVal = 1;
+            
+            if (currentProduct && newVal > currentProduct.QuantityAvailable) {
+                showToast(`Chỉ còn ${currentProduct.QuantityAvailable} chiếc trong kho!`, 'bg-warning text-dark');
+                return;
+            }
+            input.value = newVal;
+        }
+
+        document.getElementById('btnAddToCart').addEventListener('click', () => {
+            if (!currentProduct) return;
+
+            const qtyToAdd = parseInt(document.getElementById('buyQty').value);
+            const existingItem = cart.find(item => item.ProductID === currentProduct.ProductID);
+
+            if (existingItem) {
+                if (existingItem.quantity + qtyToAdd > currentProduct.QuantityAvailable) {
+                    showToast('Số lượng cộng dồn vượt quá số lượng trong kho!', 'bg-danger text-white');
+                    return;
+                }
+                existingItem.quantity += qtyToAdd;
+            } else {
+                cart.push({
+                    ProductID: currentProduct.ProductID,
+                    ProductName: currentProduct.ProductName,
+                    Price: currentProduct.Price,
+                    ImageURL: currentProduct.ImageURL,
+                    quantity: qtyToAdd
+                });
+            }
+
+            localStorage.setItem('bakery_cart', JSON.stringify(cart));
+            updateCartBadge();
+            showToast(`Đã thêm ${qtyToAdd} chiếc ${currentProduct.ProductName} vào giỏ hàng!`, 'bg-success text-white');
+        });
+
+        function updateCartBadge() {
+            const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+            document.getElementById('cartBadge').innerText = totalItems;
+        }
+
+        function showToast(message, colorClass) {
+            const toastEl = document.getElementById('cartToast');
+            const toastMessage = document.getElementById('toastMessage');
+            
+            toastEl.className = `toast align-items-center border-0 ${colorClass}`;
+            toastMessage.innerText = message;
+            
+            const toast = new bootstrap.Toast(toastEl);
+            toast.show();
+        }
+
+        loadProductDetail();
+    </script>
+</body>
+</html>

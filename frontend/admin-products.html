@@ -8,6 +8,9 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body class="bg-light" style="display: none;"> <div class="container mt-4">
+        <a href="admin-dashboard.html" class="text-decoration-none text-secondary mb-3 d-inline-block custom-back-btn">
+            <i class="fas fa-arrow-left me-1"></i> Quay lại Bảng điều khiển
+        </a>
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2>Quản lý Sản phẩm</h2>
             <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addProductModal">
@@ -104,7 +107,7 @@
     
     <script>
         // Lấy token từ bộ nhớ
-        const token = localStorage.getItem('token');
+        const token = localStorage.getItem('bakery_token');
 
         // Các biến quản lý trạng thái
         let currentProducts = []; 

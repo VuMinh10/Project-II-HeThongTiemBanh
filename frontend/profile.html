@@ -1,18 +1,28 @@
-<!DOCTYPE html> //XXX
+<!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hồ sơ của tôi - Tiệm Bánh Ngọt</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .custom-back-btn:hover {
+            color: #0d6efd !important;
+            transform: translateX(-5px);
+            transition: all 0.3s ease;
+        }
+    </style>
 </head>
 <body class="bg-light">
 
     <div class="container mt-5">
+        <a href="index.html" class="text-decoration-none text-secondary mb-3 d-inline-block custom-back-btn">
+            <i class="fas fa-arrow-left me-1"></i> Quay lại Trang chủ
+        </a>
         <div class="row justify-content-center">
             <div class="col-md-6">
                 <div class="card shadow p-4" style="border-radius: 15px;">
-                    <h3 class="text-center text-primary mb-4">👤 Thông tin cá nhân</h3>
+                    <h3 class="text-center text-primary mb-4">Thông tin cá nhân</h3>
                     
                     <div id="errorAlert" class="alert alert-danger d-none" role="alert"></div>
 
@@ -25,8 +35,8 @@
 
                     <div id="profileForm" class="d-none">
                         <div class="mb-3">
-                            <label class="form-label text-muted">Tên tài khoản</label>
-                            <input type="text" class="form-control" id="username" readonly>
+                            <label class="form-label text-muted">Tên tài khoản (Không thể sửa)</label>
+                            <input type="text" class="form-control bg-light" id="username" readonly>
                         </div>
                         <div class="mb-3">
                             <label class="form-label text-muted">Họ và tên</label>
@@ -41,7 +51,15 @@
                             <input type="email" class="form-control" id="email" readonly>
                         </div>
 
-                        <button id="btnLogout" class="btn btn-outline-danger w-100">Đăng Xuất</button>
+                        <div id="viewMode">
+                            <button id="btnEdit" class="btn btn-primary w-100 mb-2">Chỉnh sửa thông tin</button>
+                            <button id="btnLogout" class="btn btn-outline-danger w-100">Đăng xuất</button>
+                        </div>
+
+                        <div id="editMode" class="d-none">
+                            <button id="btnSave" class="btn btn-success w-100 mb-2">Lưu thay đổi</button>
+                            <button id="btnCancel" class="btn btn-secondary w-100">Hủy bỏ</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -50,60 +68,127 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
-            const token = localStorage.getItem('token');
-
-            // 1. Kiểm tra Token: Nếu không có, âm thầm đuổi về trang login ngay lập tức
-            if (!token) {
-                window.location.replace('/login.html'); 
-                return;
-            }
+            const token = localStorage.getItem('bakery_token');
+            if (!token) { window.location.replace('login.html'); return; }
 
             const errorAlert = document.getElementById('errorAlert');
             const loadingSpinner = document.getElementById('loadingSpinner');
             const profileForm = document.getElementById('profileForm');
+            
+            // Các phần tử giao diện
+            const inputs = {
+                fullName: document.getElementById('fullName'),
+                phone: document.getElementById('phone'),
+                email: document.getElementById('email'),
+                username: document.getElementById('username')
+            };
+            const viewMode = document.getElementById('viewMode');
+            const editMode = document.getElementById('editMode');
+            
+            let originalData = {}; // Nơi lưu dữ liệu gốc để dùng khi bấm "Hủy"
 
-            try {
-                // 2. Fetch dữ liệu từ API
-                const response = await fetch('http://localhost:3000/api/profile', {
-                    method: 'GET',
-                    headers: { 
-                        'Authorization': `Bearer ${token}` 
-                    }
-                });
+            // Hàm tải dữ liệu
+            async function loadProfile() {
+                try {
+                    const response = await fetch('http://localhost:3000/api/profile', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.error);
 
-                const data = await response.json();
+                    // Lưu vào bản gốc và đổ lên giao diện
+                    originalData = data.profile;
+                    inputs.username.value = originalData.Username;
+                    inputs.fullName.value = originalData.FullName;
+                    inputs.phone.value = originalData.Phone || '';
+                    inputs.email.value = originalData.Email;
 
-                if (!response.ok) {
-                    throw new Error(data.error || 'Phiên đăng nhập không hợp lệ');
+                    loadingSpinner.classList.add('d-none');
+                    profileForm.classList.remove('d-none');
+                } catch (error) {
+                    errorAlert.innerText = error.message;
+                    errorAlert.classList.remove('d-none');
+                    loadingSpinner.classList.add('d-none');
                 }
-
-                // 3. Đổ dữ liệu vào giao diện
-                document.getElementById('username').value = data.profile.Username;
-                document.getElementById('fullName').value = data.profile.FullName;
-                document.getElementById('phone').value = data.profile.Phone || 'Chưa cập nhật';
-                document.getElementById('email').value = data.profile.Email || 'Chưa cập nhật';
-
-                // Tắt vòng quay loading và hiện Form lên
-                loadingSpinner.classList.add('d-none');
-                profileForm.classList.remove('d-none');
-
-            } catch (error) {
-                // Xử lý khi token lỗi hoặc mạng rớt
-                loadingSpinner.classList.add('d-none');
-                errorAlert.innerText = error.message;
-                errorAlert.classList.remove('d-none');
-                
-                // Xóa token hỏng và đẩy về login sau 2 giây
-                localStorage.removeItem('token');
-                setTimeout(() => window.location.replace('/login.html'), 2000);
             }
-        });
 
-        // Xử lý Đăng xuất
-        document.getElementById('btnLogout').addEventListener('click', () => {
-            localStorage.removeItem('token');
-            localStorage.removeItem('userInfo'); 
-            window.location.replace('/login.html');
+            // Hàm bật tắt chế độ chỉnh sửa
+            function toggleEdit(isEditing) {
+                // Chuyển trạng thái readonly
+                inputs.fullName.readOnly = !isEditing;
+                inputs.phone.readOnly = !isEditing;
+                inputs.email.readOnly = !isEditing;
+
+                // Chuyển đổi các nút bấm
+                if (isEditing) {
+                    viewMode.classList.add('d-none');
+                    editMode.classList.remove('d-none');
+                } else {
+                    viewMode.classList.remove('d-none');
+                    editMode.classList.add('d-none');
+                }
+            }
+
+            // Event bấm nút
+
+            // Bấm nút "Chỉnh sửa"
+            document.getElementById('btnEdit').addEventListener('click', () => toggleEdit(true));
+
+            // Bấm nút "Hủy" -> Trả về dữ liệu cũ
+            document.getElementById('btnCancel').addEventListener('click', () => {
+                inputs.fullName.value = originalData.FullName;
+                inputs.phone.value = originalData.Phone || '';
+                inputs.email.value = originalData.Email;
+                toggleEdit(false);
+            });
+
+            // Bấm nút "Lưu" -> Gọi API PUT
+            document.getElementById('btnSave').addEventListener('click', async () => {
+                const btnSave = document.getElementById('btnSave');
+                btnSave.disabled = true;
+                btnSave.innerText = 'Đang lưu...';
+
+                try {
+                    const response = await fetch('http://localhost:3000/api/profile', {
+                        method: 'PUT',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            FullName: inputs.fullName.value,
+                            Phone: inputs.phone.value,
+                            Email: inputs.email.value
+                        })
+                    });
+
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error);
+
+                    alert('Cập nhật hồ sơ thành công!');
+                    // Cập nhật lại bản gốc và quay về chế độ xem
+                    originalData.FullName = inputs.fullName.value;
+                    originalData.Phone = inputs.phone.value;
+                    originalData.Email = inputs.email.value;
+                    toggleEdit(false);
+
+                } catch (error) {
+                    alert(error.message);
+                } finally {
+                    btnSave.disabled = false;
+                    btnSave.innerText = 'Lưu thay đổi';
+                }
+            });
+
+            // Nút Đăng xuất
+            document.getElementById('btnLogout').addEventListener('click', () => {
+                localStorage.removeItem('bakery_token');
+                localStorage.removeItem('bakery_user');
+                window.location.replace('login.html');
+            });
+
+            // Khởi động tải dữ liệu
+            loadProfile();
         });
     </script>
 </body>

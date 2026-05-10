@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Giỏ hàng của bạn</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <!-- Navbar có Badge đồng bộ với Trang chủ -->
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold " style="color: #FF69B4;" href="index.html">SweetBakery</a>
+            <div class="d-flex align-items-center ms-auto">
+                <a href="cart.html" class="btn btn-dark position-relative me-3">
+                    <i class="fas fa-shopping-cart"></i> Giỏ hàng
+                    <span id="cartBadge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                        0
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Khu vực Giỏ hàng -->
+    <div class="container mt-5 mb-5">
+        <h2 class="fw-bold mb-4">Giỏ hàng của bạn</h2>
+        
+        <div class="row">
+            <!-- Cột trái: Danh sách bánh -->
+            <div class="col-md-8">
+                <div class="card shadow-sm border-0">
+                    <div class="card-body p-0">
+                        <table class="table table-borderless align-middle mb-0">
+                            <thead class="bg-light text-muted">
+                                <tr>
+                                    <th class="ps-4">Sản phẩm</th>
+                                    <th>Đơn giá</th>
+                                    <th>Số lượng</th>
+                                    <th>Thành tiền</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="cartTableBody">
+                                <!-- JS vẽ vào đây -->
+                            </tbody>
+                        </table>
+                        
+                        <!-- Hiển thị khi giỏ hàng trống -->
+                        <div id="emptyCartMsg" class="text-center py-5 d-none">
+                            <i class="fas fa-shopping-basket fa-4x text-muted mb-3"></i>
+                            <h5 class="text-muted">Giỏ hàng của bạn đang trống</h5>
+                            <a href="index.html" class="btn btn-primary mt-3">Quay lại mua sắm</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cột phải: Khung tính tổng tiền -->
+            <div class="col-md-4 mt-4 mt-md-0">
+                <div class="card shadow-sm border-0 bg-white">
+                    <div class="card-body p-4">
+                        <h4 class="fw-bold mb-4">Tóm tắt đơn hàng</h4>
+                        <div class="d-flex justify-content-between mb-3">
+                            <span class="text-muted">Tạm tính:</span>
+                            <span class="fw-bold" id="subTotal">0 ₫</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-3 border-bottom pb-3">
+                            <span class="text-muted">Phí giao hàng:</span>
+                            <span class="text-success">Miễn phí</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-4">
+                            <span class="fs-5 fw-bold">Tổng cộng:</span>
+                            <span class="fs-4 fw-bold text-danger" id="finalTotal">0 ₫</span>
+                        </div>
+                        
+                        <button class="btn btn-primary w-100 py-3 fw-bold fs-5" id="btnCheckout">
+                            Tiến hành Thanh toán
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let cart = JSON.parse(localStorage.getItem('bakery_cart')) || [];
+
+        // Hàm cập nhật con số đỏ trên icon Giỏ hàng
+        function updateCartBadge() {
+            const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+            document.getElementById('cartBadge').innerText = totalItems;
+        }
+
+        function renderCart() {
+            const tbody = document.getElementById('cartTableBody');
+            const emptyMsg = document.getElementById('emptyCartMsg');
+            let totalAmount = 0;
+
+            tbody.innerHTML = '';
+
+            if (cart.length === 0) {
+                document.querySelector('table').classList.add('d-none');
+                emptyMsg.classList.remove('d-none');
+                document.getElementById('btnCheckout').disabled = true;
+            } else {
+                document.querySelector('table').classList.remove('d-none');
+                emptyMsg.classList.add('d-none');
+                document.getElementById('btnCheckout').disabled = false;
+
+                cart.forEach((item, index) => {
+                    const itemTotal = item.Price * item.quantity;
+                    totalAmount += itemTotal;
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td class="ps-4">
+                            <div class="d-flex align-items-center">
+                                <img src="${item.ImageURL || 'https://via.placeholder.com/60'}" class="rounded me-3" width="60" height="60" style="object-fit: cover;">
+                                <span class="fw-bold">${item.ProductName}</span>
+                            </div>
+                        </td>
+                        <td>${Number(item.Price).toLocaleString('vi-VN')} ₫</td>
+                        <td>
+                            <div class="input-group input-group-sm" style="width: 100px;">
+                                <button class="btn btn-outline-secondary" onclick="updateQuantity(${index}, -1)">-</button>
+                                <input type="text" class="form-control text-center bg-white" value="${item.quantity}" readonly>
+                                <button class="btn btn-outline-secondary" onclick="updateQuantity(${index}, 1)">+</button>
+                            </div>
+                        </td>
+                        <td class="fw-bold text-danger">${Number(itemTotal).toLocaleString('vi-VN')} ₫</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-danger" onclick="removeItem(${index})"><i class="fas fa-trash"></i></button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            document.getElementById('subTotal').innerText = Number(totalAmount).toLocaleString('vi-VN') + ' ₫';
+            document.getElementById('finalTotal').innerText = Number(totalAmount).toLocaleString('vi-VN') + ' ₫';
+            
+            // Gọi hàm update Badge mỗi khi vẽ lại giỏ hàng
+            updateCartBadge();
+        }
+
+        function updateQuantity(index, change) {
+            // Ngăn không cho bấm dấu trừ khi số lượng đang là 1 (tránh tự động xóa khi lỡ tay bấm)
+            if (change === -1 && cart[index].quantity === 1) {
+                removeItem(index); // Đẩy qua hàm hỏi xác nhận xóa
+                return;
+            }
+
+            // Tạm thời giới hạn mua tối đa 50 cái mỗi loại 
+            if (change === 1 && cart[index].quantity >= 50) {
+                alert('Bạn chỉ có thể mua tối đa 50 sản phẩm mỗi loại trong một đơn hàng!');
+                return;
+            }
+
+            cart[index].quantity += change;
+            saveAndRender();
+        }
+
+        function removeItem(index) {
+            if(confirm('Bạn có chắc chắn muốn bỏ bánh này khỏi giỏ?')) {
+                cart.splice(index, 1);
+                saveAndRender();
+            }
+        }
+
+        function saveAndRender() {
+            localStorage.setItem('bakery_cart', JSON.stringify(cart));
+            renderCart();
+        }
+
+        document.getElementById('btnCheckout').addEventListener('click', () => {
+            // Chuyển hướng sang trang Thanh toán thực sự
+            window.location.href = 'checkout.html';
+        });
+
+        // Chạy lần đầu
+        renderCart();
+    </script>
+</body>
+</html>
