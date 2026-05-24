@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý Đơn hàng - SweetBakery</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold text-warning" href="admin-dashboard.html">Admin Panel</a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="admin-products.html">Sản phẩm</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="admin-orders.html">Đơn hàng</a></li>
+                </ul>
+                <a href="index.html" class="btn btn-outline-light btn-sm">Xem trang khách</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="mb-3 d-flex align-items-center gap-2">
+        <label class="fw-bold">Lọc trạng thái:</label>
+        <select id="filterStatus" class="form-select" style="width: 200px;">
+            <option value="Tất cả">Tất cả đơn hàng</option>
+            <option value="Chờ xác nhận">Chờ xác nhận</option>
+            <option value="Chờ xác nhận">Đang chuẩn bị</option>
+            <option value="Sẵn sàng giao/nhận">Sẵn sàng giao/nhận</option>
+            <option value="Đã hoàn thành">Đã hoàn thành</option>
+            <option value="Đã hủy">Đã hủy</option>
+        </select>
+    </div>
+
+    <div class="container-fluid mt-4 px-4">
+        <h2 class="fw-bold mb-4">Quản lý Đơn hàng</h2>
+
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Mã Đơn</th>
+                                <th>Ngày Đặt</th>
+                                <th>Người Nhận</th>
+                                <th>Giao Hàng</th>
+                                <th>Tổng Tiền</th>
+                                <th>Trạng Thái</th>
+                                <th>Thao Tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orderTableBody">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="orderDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold" id="modalTitle">Chi tiết đơn hàng #</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-with="modal" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <table class="table table-bordered align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Hình ảnh</th>
+                                <th>Tên bánh</th>
+                                <th>Đơn giá</th>
+                                <th>Số lượng</th>
+                                <th>Thành tiền</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modalTableBody">
+                            </tbody>
+                    </table>
+                    <div class="text-end mt-3">
+                        <h4 class="fw-bold text-danger">Tổng đơn: <span id="modalTotalAmount">0 ₫</span></h4>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng lại</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // 1. Hệ thống bảo vệ trang admin
+            const token = localStorage.getItem('bakery_token');
+            const userRaw = localStorage.getItem('bakery_user');
+
+            if (!token || !userRaw) {
+                alert('Vui lòng đăng nhập!');
+                window.location.replace('login.html');
+                return;
+            }
+
+            const userInfo = JSON.parse(userRaw);
+            if (userInfo.roleId !== 2) {
+                alert('Truy cập bị từ chối: Chỉ dành cho Quản trị viên!');
+                window.location.replace('index.html');
+                return;
+            }
+
+            // Khởi tạo đối tượng điều khiển Modal
+            const detailModal = new bootstrap.Modal(document.getElementById('orderDetailModal'));
+
+            
+            // 2. Các hàm xử lý dữ liệu
+
+            // Tải danh sách đơn hàng
+            window.loadOrders = async function() {
+                try {
+                    const response = await fetch('http://localhost:3000/api/admin/orders', {
+                        headers: { 'Authorization': `Bearer ${token}` } // Trình thẻ bài
+                    });
+                    const orders = await response.json();
+                    
+                    if(!response.ok) throw new Error(orders.error);
+
+                    const tbody = document.getElementById('orderTableBody');
+                    tbody.innerHTML = '';
+
+                    orders.forEach(o => {
+                        const dateObj = new Date(o.OrderDate);
+                        const formattedDate = `${dateObj.getHours()}:${dateObj.getMinutes()} - ${dateObj.getDate()}/${dateObj.getMonth()+1}/${dateObj.getFullYear()}`;
+
+                        let statusColor = 'bg-secondary';
+                        if (o.Status === 'Chờ xác nhận') statusColor = 'bg-warning text-dark';
+                        if (o.Status === 'Đang chuẩn bị' || o.Status === 'Sẵn sàng giao/nhận') statusColor = 'bg-info text-dark';
+                        if (o.Status === 'Đã hoàn thành') statusColor = 'bg-success';
+                        if (o.Status === 'Đã hủy') statusColor = 'bg-danger';
+
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td class="fw-bold">
+                                <button class="btn btn-link fw-bold p-0 text-decoration-none" onclick="viewDetails(${o.OrderID}, ${o.TotalAmount})">
+                                    #${o.OrderID}
+                                </button>
+                            </td>
+                            <td>${formattedDate}</td>
+                            <td>
+                                <strong>${o.ReceiverName}</strong><br>
+                                <small class="text-muted">${o.ReceiverPhone}</small>
+                            </td>
+                            <td>
+                                <span class="badge border border-dark text-dark">${o.DeliveryMethod}</span>
+                            </td>
+                            <td class="fw-bold text-danger">${Number(o.TotalAmount).toLocaleString('vi-VN')} ₫</td>
+                            <td>
+                                <span class="badge ${statusColor} px-2 py-1">${o.Status}</span>
+                            </td>
+                            <td>
+                                <div class="d-flex gap-2">
+                                    <div class="input-group input-group-sm" style="width: 170px;">
+                                        <select class="form-select" id="statusSelect_${o.OrderID}" ${o.Status === 'Đã hủy' || o.Status === 'Đã hoàn thành' ? 'disabled' : ''}>
+                                            <option value="Chờ xác nhận" ${o.Status === 'Chờ xác nhận' ? 'selected' : ''}>Chờ xác nhận</option>
+                                            <option value="Đang chuẩn bị" ${o.Status === 'Đang chuẩn bị' ? 'selected' : ''}>Đang chuẩn bị</option>
+                                            <option value="Sẵn sàng giao/nhận" ${o.Status === 'Sẵn sàng giao/nhận' ? 'selected' : ''}>Sẵn sàng giao/nhận</option>
+                                            <option value="Đã hoàn thành" ${o.Status === 'Đã hoàn thành' ? 'selected' : ''}>Đã hoàn thành</option>
+                                            <option value="Đã hủy" ${o.Status === 'Đã hủy' ? 'selected' : ''}>Hủy đơn</option>
+                                        </select>
+                                        <button class="btn btn-primary" onclick="updateStatus(${o.OrderID})" ${o.Status === 'Đã hủy' || o.Status === 'Đã hoàn thành' ? 'disabled' : ''}>
+                                            Lưu
+                                        </button>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="viewDetails(${o.OrderID}, ${o.TotalAmount})">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+
+                    //Sau khi vẽ xong bảng, tự động áp dụng lại bộ lọc hiện tại
+                    const currentFilter = document.getElementById('filterStatus');
+                    if (currentFilter) currentFilter.dispatchEvent(new Event('change'));
+
+                } catch (error) {
+                    console.error('Lỗi:', error);
+                    alert('Phiên đăng nhập hết hạn hoặc bạn không có quyền xem trang này!');
+                }
+            }
+
+            // Xem chi tiết đơn hàng
+            window.viewDetails = async function(orderId, totalAmount) {
+                try {
+                    const response = await fetch(`http://localhost:3000/api/admin/orders/${orderId}/details`, {
+                        headers: { 'Authorization': `Bearer ${token}` } // Trình thẻ bài
+                    });
+                    const details = await response.json();
+                    
+                    if(!response.ok) throw new Error(details.error);
+
+                    document.getElementById('modalTitle').innerText = `Chi tiết đơn hàng #${orderId}`;
+                    document.getElementById('modalTotalAmount').innerText = Number(totalAmount).toLocaleString('vi-VN') + ' ₫';
+
+                    const tbody = document.getElementById('modalTableBody');
+                    tbody.innerHTML = '';
+
+                    details.forEach(item => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>
+                                <img src="${item.ImageURL || 'https://via.placeholder.com/50'}" class="rounded" width="50" height="50" style="object-fit: cover;">
+                            </td>
+                            <td class="fw-bold">${item.ProductName}</td>
+                            <td>${Number(item.UnitPrice).toLocaleString('vi-VN')} ₫</td>
+                            <td class="text-center">${item.Quantity}</td>
+                            <td class="fw-bold text-danger">${Number(item.SubTotal).toLocaleString('vi-VN')} ₫</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+
+                    detailModal.show();
+                } catch (error) {
+                    alert('Không thể tải chi tiết đơn hàng này!');
+                }
+            }
+
+            // Cập nhật trạng thái
+            window.updateStatus = async function(orderId) {
+                const newStatus = document.getElementById(`statusSelect_${orderId}`).value;
+                if (newStatus === 'Đã hủy') {
+                    if (!confirm('Bạn có chắc chắn muốn Hủy đơn này? Hệ thống sẽ tự động cộng lại số bánh vào kho.')) return;
+                }
+
+                try {
+                    const response = await fetch(`http://localhost:3000/api/admin/orders/${orderId}/status`, {
+                        method: 'PUT',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}` // Trình thẻ bài
+                        },
+                        body: JSON.stringify({ Status: newStatus })
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        alert('Đã cập nhật trạng thái đơn hàng!');
+                        loadOrders(); // Tải lại bảng ngay lập tức
+                    } else {
+                        alert('Lỗi: ' + result.error);
+                    }
+                } catch (error) {
+                    alert('Có lỗi xảy ra khi cập nhật!');
+                }
+            }
+
+            // Xử lý lọc trạng thái đơn hàng
+            const filterStatus = document.getElementById('filterStatus');
+            if (filterStatus) {
+                filterStatus.addEventListener('change', function() {
+                    const selectedStatus = this.value;
+                    const rows = document.querySelectorAll('#orderTableBody tr');
+                    
+                    rows.forEach(row => {
+                        // Tìm cột chứa trạng thái (cột thứ 6) để lấy chữ bên trong huy hiệu
+                        const statusBadge = row.querySelectorAll('td')[5].querySelector('.badge');
+                        if (statusBadge) {
+                            const statusText = statusBadge.innerText.trim();
+                            if (selectedStatus === 'Tất cả' || statusText === selectedStatus) {
+                                row.style.display = ''; // Hiện dòng
+                            } else {
+                                row.style.display = 'none'; // Ẩn dòng
+                            }
+                        }
+                    });
+                });
+            }
+
+            // Khởi động
+            loadOrders();
+        });
+    </script>
+</body>
+</html>

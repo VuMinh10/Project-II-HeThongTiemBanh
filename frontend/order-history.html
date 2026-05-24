@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lịch sử Đơn hàng - SweetBakery</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold " style="color: #FF69B4;" href="index.html">SweetBakery</a>
+            <div class="d-flex align-items-center ms-auto">
+                <a href="order-history.html" class="btn btn-primary me-3">
+                    <i class="fas fa-clipboard-list"></i> Lịch sử đơn hàng
+                </a>
+                <a href="profile.html" class="btn btn-outline-dark">
+                    <i class="fas fa-user"></i> Hồ sơ
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-5 mb-5">
+        <h2 class="fw-bold mb-4">Lịch sử mua hàng của bạn</h2>
+        
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="bg-light text-muted">
+                            <tr>
+                                <th class="ps-4">Mã Đơn</th>
+                                <th>Ngày Đặt</th>
+                                <th>Nhận hàng</th>
+                                <th>Tổng Tiền</th>
+                                <th>Trạng Thái</th>
+                                <th>Chi tiết</th>
+                            </tr>
+                        </thead>
+                        <tbody id="userOrderBody">
+                            </tbody>
+                    </table>
+                </div>
+                
+                <div id="emptyOrderMsg" class="text-center py-5 d-none">
+                    <i class="fas fa-box-open fa-4x text-muted mb-3"></i>
+                    <h5 class="text-muted">Bạn chưa có đơn hàng nào</h5>
+                    <a href="index.html" class="btn btn-primary mt-3">Đi mua bánh ngay</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="customerDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold" id="modalTitle">Chi tiết đơn hàng #</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <table class="table table-bordered align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Hình ảnh</th>
+                                <th>Tên bánh</th>
+                                <th>Đơn giá</th>
+                                <th>Số lượng</th>
+                                <th>Thành tiền</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modalTableBody">
+                            </tbody>
+                    </table>
+                    <div class="text-end mt-3">
+                        <h4 class="fw-bold text-danger">Tổng thanh toán: <span id="modalTotalAmount">0 ₫</span></h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Gói toàn bộ sự kiện tải trang (bảo mật)
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            const token = localStorage.getItem('bakery_token');
+            if (!token) {
+                alert('Vui lòng đăng nhập để xem lịch sử mua hàng!');
+                window.location.replace('login.html');
+                return;
+            }
+
+            const detailModal = new bootstrap.Modal(document.getElementById('customerDetailModal'));
+
+            // 1. Tải danh sách đơn hàng của khách 
+            window.loadUserOrders = async function() {
+                try {
+                    const response = await fetch('http://localhost:3000/api/orders/history', {
+                        headers: { 'Authorization': `Bearer ${token}` } // Trình token
+                    });
+                    const orders = await response.json();
+                    
+                    if (!response.ok) throw new Error(orders.error);
+                    
+                    const tbody = document.getElementById('userOrderBody');
+                    const emptyMsg = document.getElementById('emptyOrderMsg');
+                    
+                    if (orders.length === 0) {
+                        document.querySelector('table').classList.add('d-none');
+                        emptyMsg.classList.remove('d-none');
+                        return;
+                    }
+
+                    tbody.innerHTML = '';
+                    orders.forEach(o => {
+                        const dateObj = new Date(o.OrderDate);
+                        const formattedDate = `${dateObj.getHours()}:${dateObj.getMinutes()} - ${dateObj.getDate()}/${dateObj.getMonth()+1}/${dateObj.getFullYear()}`;
+
+                        let statusColor = 'bg-secondary';
+                        if (o.Status === 'Chờ xác nhận') statusColor = 'bg-warning text-dark';
+                        if (o.Status === 'Đang chuẩn bị' || o.Status === 'Sẵn sàng giao/nhận') statusColor = 'bg-info text-dark';
+                        if (o.Status === 'Đã hoàn thành') statusColor = 'bg-success';
+                        if (o.Status === 'Đã hủy') statusColor = 'bg-danger';
+
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td class="ps-4 fw-bold text-primary">#${o.OrderID}</td>
+                            <td>${formattedDate}</td>
+                            <td>${o.DeliveryMethod}</td>
+                            <td class="fw-bold text-danger">${Number(o.TotalAmount).toLocaleString('vi-VN')} ₫</td>
+                            <td><span class="badge ${statusColor} px-2 py-1">${o.Status}</span></td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" onclick="viewOrderDetails(${o.OrderID}, ${o.TotalAmount})">
+                                    Xem chi tiết
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                } catch (error) {
+                    alert('Phiên đăng nhập hết hạn hoặc có lỗi xảy ra!');
+                    window.location.replace('login.html');
+                }
+            }
+
+            // 2. Hàm xem chi tiết 
+            window.viewOrderDetails = async function(orderId, totalAmount) {
+                try {
+                    const response = await fetch(`http://localhost:3000/api/orders/${orderId}/details`, {
+                        headers: { 'Authorization': `Bearer ${token}` } 
+                    });
+                    const details = await response.json();
+
+                    if (!response.ok) throw new Error(details.error);
+
+                    document.getElementById('modalTitle').innerText = `Chi tiết đơn hàng #${orderId}`;
+                    document.getElementById('modalTotalAmount').innerText = Number(totalAmount).toLocaleString('vi-VN') + ' ₫';
+
+                    const tbody = document.getElementById('modalTableBody');
+                    tbody.innerHTML = '';
+
+                    details.forEach(item => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><img src="${item.ImageURL || 'https://via.placeholder.com/50'}" class="rounded" width="50" height="50" style="object-fit: cover;"></td>
+                            <td class="fw-bold">${item.ProductName}</td>
+                            <td>${Number(item.UnitPrice).toLocaleString('vi-VN')} ₫</td>
+                            <td class="text-center">${item.Quantity}</td>
+                            <td class="fw-bold text-danger">${Number(item.SubTotal).toLocaleString('vi-VN')} ₫</td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+
+                    detailModal.show();
+                } catch (error) {
+                    alert('Không thể tải chi tiết đơn hàng này!');
+                }
+            }
+
+            // Khởi động
+            loadUserOrders();
+        });
+    </script>
+</body>
+</html>

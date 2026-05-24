@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thanh Toán - SweetBakery</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top">
+        <div class="container">
+            <a class="navbar-brand fw-bold " style="color: #FF69B4;" href="index.html">SweetBakery</a>
+            <div class="d-flex align-items-center ms-auto">
+                <a href="cart.html" class="btn btn-outline-secondary me-2">
+                    <i class="fas fa-arrow-left"></i> Quay lại giỏ hàng
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-5 mb-5">
+        <h2 class="fw-bold mb-4">Thông tin Thanh toán</h2>
+        
+        <div class="row">
+            <div class="col-md-7">
+                <div class="card shadow-sm border-0 mb-4">
+                    <div class="card-body p-4">
+                        <h5 class="fw-bold mb-3 border-bottom pb-2">Thông tin nhận hàng</h5>
+                        <form id="checkoutForm">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Người nhận <span class="text-danger">*</span></label>
+                                    <input type="text" id="txtReceiverName" class="form-control" required placeholder="Tên người nhận">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Số điện thoại <span class="text-danger">*</span></label>
+                                    <input type="text" id="txtReceiverPhone" class="form-control" required placeholder="Số điện thoại">
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Phương thức nhận hàng</label>
+                                <select id="selDeliveryMethod" class="form-select" onchange="toggleAddress()">
+                                    <option value="Giao hàng">Giao hàng tận nơi</option>
+                                    <option value="Nhận tại quầy">Đến cửa hàng lấy (Nhận tại quầy)</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-4" id="addressBox">
+                                <label class="form-label">Địa chỉ giao hàng <span class="text-danger">*</span></label>
+                                <textarea id="txtAddress" class="form-control" rows="3" required placeholder="Số nhà, Tên đường, Phường/Xã..."></textarea>
+                            </div>
+
+                            <h5 class="fw-bold mb-3 border-bottom pb-2 mt-4">Phương thức thanh toán</h5>
+                            <div class="mb-3">
+                                <select id="selPaymentMethod" class="form-select">
+                                    <option value="Tiền mặt">Thanh toán tiền mặt khi nhận bánh (COD)</option>
+                                    <option value="Chuyển khoản">Chuyển khoản ngân hàng (Quét mã QR)</option>
+                                    <option value="Online giả lập">Thanh toán Online (Ví điện tử - Giả lập)</option>
+                                </select>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-lg w-100 fw-bold mt-3" id="btnPlaceOrder">
+                                XÁC NHẬN ĐẶT HÀNG
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-5">
+                <div class="card shadow-sm border-0 bg-white">
+                    <div class="card-body p-4 bg-light rounded">
+                        <h5 class="fw-bold mb-4">Đơn hàng của bạn</h5>
+                        <ul class="list-group list-group-flush mb-3 bg-transparent" id="orderSummaryList">
+                            </ul>
+                        
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted">Tạm tính:</span>
+                            <span class="fw-bold" id="checkoutSubTotal">0 ₫</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-3 border-bottom pb-3">
+                            <span class="text-muted">Phí vận chuyển:</span>
+                            <span class="text-success">Miễn phí</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="fs-5 fw-bold">Tổng cộng:</span>
+                            <span class="fs-4 fw-bold text-danger" id="checkoutFinalTotal">0 ₫</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="paymentModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title fw-bold"><i class="fas fa-qrcode"></i> Cổng thanh toán VNPay / MoMo</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center p-4">
+                    <h5 class="mb-3">Quét mã QR để thanh toán</h5>
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=ThanhToanDonHang_SweetBakery" alt="QR Code" class="img-fluid border p-2 rounded mb-3">
+                    <h3 class="text-danger fw-bold" id="qrTotalAmount">0 ₫</h3>
+                    <p class="text-muted small">Nội dung chuyển khoản: <strong class="text-dark">Thanh toán đơn hàng SweetBakery</strong></p>
+                    <hr>
+                    <p class="text-warning small mb-0"><i class="fas fa-exclamation-triangle"></i> Đây là môi trường giả lập. Vui lòng bấm Xác nhận sau khi bạn (giả vờ) quét mã thành công!</p>
+                </div>
+                <div class="modal-footer justify-content-center">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy bỏ</button>
+                    <button type="button" class="btn btn-success fw-bold px-4" id="btnConfirmPayment">
+                        <i class="fas fa-check-circle"></i> XÁC NHẬN ĐÃ THANH TOÁN
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // 1. Kiểm tra token
+            const token = localStorage.getItem('bakery_token');
+            const userRaw = localStorage.getItem('bakery_user');
+
+            if (!token || !userRaw) {
+                alert('Vui lòng đăng nhập trước khi tiến hành thanh toán!');
+                window.location.href = 'login.html';
+                return; // Dừng lại ngay lập tức
+            }
+
+            const userInfo = JSON.parse(userRaw);
+
+            // 2. Tải giỏ hàng
+            let cart = JSON.parse(localStorage.getItem('bakery_cart')) || [];
+            let totalAmount = 0;
+
+            if (cart.length === 0) {
+                alert('Giỏ hàng của bạn đang trống! Hãy chọn bánh trước khi thanh toán.');
+                window.location.href = 'index.html';
+                return;
+            }
+
+            // Tự động điền Tên khách hàng vào form
+            document.getElementById('txtReceiverName').value = userInfo.fullName || '';
+
+            const paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));
+
+            // 3. Render giỏ hàng
+            function renderOrderSummary() {
+                const summaryList = document.getElementById('orderSummaryList');
+                summaryList.innerHTML = '';
+                totalAmount = 0;
+
+                cart.forEach(item => {
+                    const itemTotal = item.Price * item.quantity;
+                    totalAmount += itemTotal;
+
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item d-flex justify-content-between align-items-center bg-transparent px-0';
+                    li.innerHTML = `
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-secondary rounded-pill me-2">${item.quantity}</span>
+                            <span>${item.ProductName}</span>
+                        </div>
+                        <span>${Number(itemTotal).toLocaleString('vi-VN')} ₫</span>
+                    `;
+                    summaryList.appendChild(li);
+                });
+
+                document.getElementById('checkoutSubTotal').innerText = Number(totalAmount).toLocaleString('vi-VN') + ' ₫';
+                document.getElementById('checkoutFinalTotal').innerText = Number(totalAmount).toLocaleString('vi-VN') + ' ₫';
+                
+                // Cập nhật giá tiền vào modal QR 
+                document.getElementById('qrTotalAmount').innerText = Number(totalAmount).toLocaleString('vi-VN') + ' ₫';
+            }
+
+            // 4. Ẩn/hiện địa chỉ
+            const selDeliveryMethod = document.getElementById('selDeliveryMethod');
+            if(selDeliveryMethod) {
+                selDeliveryMethod.addEventListener('change', () => {
+                    const method = selDeliveryMethod.value;
+                    const addressBox = document.getElementById('addressBox');
+                    const txtAddress = document.getElementById('txtAddress');
+
+                    if (method === 'Nhận tại quầy') {
+                        addressBox.classList.add('d-none');
+                        txtAddress.required = false;
+                        txtAddress.value = '';
+                    } else {
+                        addressBox.classList.remove('d-none');
+                        txtAddress.required = true;
+                    }
+                });
+            }
+
+            // 5. Xử lý gọi API
+            async function executeOrderPlacement() {
+                const btnSubmit = document.getElementById('btnPlaceOrder');
+                btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Đang xử lý...';
+                btnSubmit.disabled = true;
+
+                const orderData = {
+                    Cart: cart,
+                    DeliveryMethod: document.getElementById('selDeliveryMethod').value,
+                    PaymentMethod: document.getElementById('selPaymentMethod').value,
+                    ReceiverName: document.getElementById('txtReceiverName').value,
+                    ReceiverPhone: document.getElementById('txtReceiverPhone').value,
+                    ShippingAddress: document.getElementById('txtAddress').value || 'Nhận tại quầy'
+                };
+
+                try {
+                    const response = await fetch('http://localhost:3000/api/orders', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}` 
+                        },
+                        body: JSON.stringify(orderData)
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        alert('🎉 Đặt hàng thành công! Cảm ơn bạn đã mua sắm tại SweetBakery.');
+                        localStorage.removeItem('bakery_cart'); 
+                        window.location.href = 'order-history.html'; 
+                    } else {
+                        alert('Lỗi: ' + result.error);
+                        btnSubmit.innerHTML = 'XÁC NHẬN ĐẶT HÀNG';
+                        btnSubmit.disabled = false;
+                        paymentModal.hide();
+                    }
+                } catch (error) {
+                    alert('Không thể kết nối đến máy chủ. Vui lòng thử lại!');
+                    btnSubmit.innerHTML = 'XÁC NHẬN ĐẶT HÀNG';
+                    btnSubmit.disabled = false;
+                    paymentModal.hide();
+                }
+            }
+
+            // 6. Sự kiện sumbit form
+            document.getElementById('checkoutForm').addEventListener('submit', (e) => {
+                e.preventDefault(); 
+                
+                const paymentMethod = document.getElementById('selPaymentMethod').value;
+
+                // Cứ không phải tiền mặt thì đều hiện mã QR
+                if (paymentMethod !== 'Tiền mặt') {
+                    // Cập nhật lại số tiền cho chắc chắn trước khi bật Modal
+                    document.getElementById('qrTotalAmount').innerText = document.getElementById('checkoutFinalTotal').innerText;
+                    paymentModal.show();
+                } else {
+                    executeOrderPlacement();
+                }
+            });
+
+            // 7. Sự kiện trong modal QR
+            document.getElementById('btnConfirmPayment').addEventListener('click', () => {
+                const btnConfirm = document.getElementById('btnConfirmPayment');
+                btnConfirm.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Đang xác thực...';
+                btnConfirm.disabled = true;
+
+                executeOrderPlacement();
+            });
+
+            // Khởi động
+            renderOrderSummary();
+        });
+    </script>
+</body>
+</html>

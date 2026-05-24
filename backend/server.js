@@ -483,7 +483,7 @@ app.post('/api/admin/employees', authenticateToken, isAdmin, async (req, res) =>
 });
 
 
-// --- API cho profile ---
+// -- API cho profile --
 // 1. Xem thông tin hồ sơ (XXX)
 app.get('/api/profile', authenticateToken, async (req, res) => {
     try {
@@ -537,6 +537,226 @@ app.put('/api/profile', authenticateToken, async (req, res) => {
         }
 
         res.status(500).json({ error: 'Lỗi máy chủ nội bộ khi cập nhật thông tin.' });
+    }
+});
+
+
+// -- API Đặt hàng & Thanh toán --
+app.post('/api/orders', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+
+    try {
+        await connection.beginTransaction(); 
+
+        const userId = req.user.userId;
+
+        const { 
+            Cart, DeliveryMethod, PaymentMethod, 
+            ReceiverName, ReceiverPhone, ShippingAddress   // TotalAmount tính ở dưới
+        } = req.body;
+
+        if (!Cart || Cart.length === 0) {
+            return res.status(400).json({ error: 'Giỏ hàng của bạn đang trống.' });
+        }
+
+        // 1. Xử lý giỏ hàng và tính tiền
+        let realTotalAmount = 0;
+        const processedItems = [];
+
+        for (let item of Cart) {
+            // Lấy giá thật và tồn kho thật từ database ra kiểm tra
+            const [products] = await connection.execute(
+                'SELECT Price, QuantityAvailable, ProductName FROM Product WHERE ProductID = ?', 
+                [item.ProductID]
+            );
+
+            if (products.length === 0) {
+                throw new Error(`Sản phẩm (ID: ${item.ProductID}) không tồn tại.`);
+            }
+
+            const dbProduct = products[0];
+
+            // Kiểm tra tồn kho trước
+            if (dbProduct.QuantityAvailable < item.quantity) {
+                throw new Error(`Bánh "${dbProduct.ProductName}" chỉ còn ${dbProduct.QuantityAvailable} chiếc trong kho!`);
+            }
+
+            // Tính tiền dựa trên giá gốc của database
+            const realSubTotal = dbProduct.Price * item.quantity;
+            realTotalAmount += realSubTotal;
+
+            // Lưu tạm vào mảng, lưu vào db sau
+            processedItems.push({
+                productID: item.ProductID,
+                quantity: item.quantity,
+                realUnitPrice: dbProduct.Price,
+                realSubTotal: realSubTotal
+            });
+        }
+
+        // 2. Tạo hóa đơn
+        const sqlOrder = `
+            INSERT INTO \`Order\` 
+            (UserID, TotalAmount, DeliveryMethod, PaymentMethod, Status, ReceiverName, ReceiverPhone, ShippingAddress) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        const [orderResult] = await connection.execute(sqlOrder, [
+            userId, realTotalAmount, DeliveryMethod, PaymentMethod, 'Chờ xác nhận', ReceiverName, ReceiverPhone, ShippingAddress
+        ]);
+        
+        const newOrderId = orderResult.insertId; 
+
+        // 3. Lưu datail và trừ tồn kho
+        for (let item of processedItems) {
+            // Lưu OrderDetail
+            const sqlDetail = `INSERT INTO OrderDetail (OrderID, ProductID, Quantity, UnitPrice, SubTotal) VALUES (?, ?, ?, ?, ?)`;
+            await connection.execute(sqlDetail, [newOrderId, item.productID, item.quantity, item.realUnitPrice, item.realSubTotal]);
+
+            // Trừ tồn kho 
+            const sqlUpdateStock = `UPDATE Product SET QuantityAvailable = QuantityAvailable - ? WHERE ProductID = ? AND QuantityAvailable >= ?`;
+            const [updateResult] = await connection.execute(sqlUpdateStock, [item.quantity, item.productID, item.quantity]);
+
+            if (updateResult.affectedRows === 0) {
+                throw new Error(`Đã có khách hàng khác nhanh tay mua hết bánh này. Vui lòng tải lại giỏ hàng!`);
+            }
+        }
+
+        await connection.commit();
+        res.status(201).json({ message: 'Đặt hàng thành công!', orderId: newOrderId, finalTotal: realTotalAmount });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error('[Order Transaction Error]:', error);
+        
+        res.status(400).json({ error: error.message || 'Lỗi hệ thống khi xử lý đơn hàng.' });
+    } finally {
+        connection.release(); 
+    }
+});
+
+// -- API Quản lý danh sách và trạng thái đơn hàng --
+
+// 1. Lấy danh sách toàn bộ đơn hàng
+app.get('/api/admin/orders', authenticateToken, isAdmin, async (req, res) => {
+    try {
+        const sql = 'SELECT * FROM `Order` ORDER BY OrderDate DESC';
+        const [orders] = await pool.execute(sql);
+        res.status(200).json(orders);
+    } catch (error) {
+        console.error('[Admin Get Orders Error]:', error);
+        res.status(500).json({ error: 'Lỗi khi lấy danh sách đơn hàng' });
+    }
+});
+
+// 2. Cập nhật trạng thái đơn hàng
+app.put('/api/admin/orders/:id/status', authenticateToken, isAdmin, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+        
+        const orderId = req.params.id;
+        const { Status } = req.body;
+
+        const validStatuses = ['Chờ xác nhận', 'Đang chuẩn bị', 'Sẵn sàng giao/nhận', 'Đã hoàn thành', 'Đã hủy'];        
+        if (!validStatuses.includes(Status)) {
+            return res.status(400).json({ error: 'Trạng thái đơn hàng không hợp lệ!' });
+        }
+
+        const [currentOrder] = await connection.execute('SELECT Status FROM `Order` WHERE OrderID = ?', [orderId]);
+        if (currentOrder.length === 0) {
+            throw new Error('Không tìm thấy đơn hàng này.');
+        }
+
+        const currentStatus = currentOrder[0].Status;
+        if (currentStatus === 'Đã hủy') {
+            return res.status(400).json({ error: 'Đơn hàng này đã bị hủy từ trước, không thể thay đổi nữa.' });
+        }
+
+        await connection.execute('UPDATE `Order` SET Status = ? WHERE OrderID = ?', [Status, orderId]);
+
+        if (Status === 'Đã hủy') {
+            const [details] = await connection.execute('SELECT ProductID, Quantity FROM OrderDetail WHERE OrderID = ?', [orderId]);
+            for (let item of details) {
+                await connection.execute(
+                    'UPDATE Product SET QuantityAvailable = QuantityAvailable + ? WHERE ProductID = ?', 
+                    [item.Quantity, item.ProductID]
+                );
+            }
+        }
+
+        await connection.commit();
+        res.status(200).json({ message: 'Cập nhật trạng thái thành công!' });
+    } catch (error) {
+        await connection.rollback();
+        console.error('[Admin Update Order Error]:', error);
+        res.status(500).json({ error: error.message || 'Lỗi hệ thống khi cập nhật trạng thái đơn hàng' });
+        
+    } finally {
+        connection.release();
+    }
+});
+
+// 3. Lấy chi tiết của một đơn hàng cụ thể
+app.get('/api/admin/orders/:id/details', authenticateToken, isAdmin, async (req, res) => {
+    try {
+        const sql = `
+            SELECT od.*, p.ProductName, p.ImageURL
+            FROM OrderDetail od
+            JOIN Product p ON od.ProductID = p.ProductID
+            WHERE od.OrderID = ?
+        `;
+        const [details] = await pool.execute(sql, [req.params.id]);
+        res.status(200).json(details);
+
+    } catch (error) {
+        console.error('[Admin Get Order Details Error]:', error);
+        res.status(500).json({ error: 'Lỗi máy chủ khi lấy chi tiết đơn hàng' });
+    }
+});
+
+// -- API lịch sử đơn hàng cho khách hàng --
+// 1. Láy danh sách đơn hàng
+app.get('/api/orders/history', authenticateToken, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+
+        const sql = 'SELECT * FROM `Order` WHERE UserID = ? ORDER BY OrderDate DESC';
+        const [orders] = await pool.execute(sql, [userId]);
+        
+        res.status(200).json(orders);
+
+    } catch (error) {
+        console.error('[Get Order History Error]:', error);
+        res.status(500).json({ error: 'Lỗi máy chủ khi lấy lịch sử đơn hàng.' });
+    }
+});
+
+// 2. Xem chi tiết một đơn hàng cụ thể 
+app.get('/api/orders/:id/details', authenticateToken, async (req, res) => {
+    try {
+        const orderId = req.params.id;
+        const userId = req.user.userId;
+
+        // Kiểm tra xem đơn hàng này có đúng là của user đang đăng nhập không
+        const [orderCheck] = await pool.execute('SELECT OrderID FROM `Order` WHERE OrderID = ? AND UserID = ?', [orderId, userId]);
+        if (orderCheck.length === 0) {
+            return res.status(403).json({error: 'Bạn không có quyền xem chi tiết đơn hàng của người khác!'});
+        }
+
+        // Nếu đúng là đơn của mình
+        const sql = `
+            SELECT od.*, p.ProductName, p.ImageURL
+            FROM OrderDetail od
+            JOIN Product p ON od.ProductID = p.ProductID
+            WHERE od.OrderID = ?
+        `;
+
+        const [details] = await pool.execute(sql, [orderId]);
+        res.status(200).json(details);
+
+    } catch (error) {
+        console.error('[Customer Get Order Details Error]:', error);
+        res.status(500).json({error: 'Lỗi máy chủ khi lấy chi tiết đơn hàng.'});
     }
 });
 
