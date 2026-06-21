@@ -22,6 +22,7 @@
             <a href="admin-categories.html"><i class="fas fa-tags me-2"></i> Quản lý Danh mục</a>
             <a href="admin-orders.html"><i class="fas fa-shopping-cart me-2"></i> Đơn hàng</a>
             <a href="#"><i class="fas fa-users me-2"></i> Khách hàng</a>
+            <a href="admin-vouchers.html"><i class="fas fa-ticket-alt me-2"></i> Khuyến mãi</a>
             <a href="pos.html"><i class="fas fa-cash-register"></i> Màn Hình POS</a>
             <a href="index.html"><i class="fas fa-store me-2"></i> Xem Cửa hàng</a>
             <a href="#" id="btnAdminLogout" class="mt-5 text-danger"><i class="fas fa-sign-out-alt me-2"></i> Đăng xuất</a>
@@ -38,45 +39,81 @@
 
             <div class="row mb-4">
                 <div class="col-md-3">
-                    <div class="card text-white bg-primary shadow">
+                    <div class="card text-white bg-primary shadow border-0">
                         <div class="card-body">
-                            <h5 class="card-title">Đơn hàng hôm nay</h5>
-                            <h3 class="card-text" id="statOrders">--</h3>
+                            <h6 class="card-title text-uppercase fw-bold opacity-75">Tổng Đơn Hàng</h6>
+                            <h3 class="card-text fw-bold" id="statOrders">0</h3>
                         </div>
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <div class="card text-white bg-success shadow">
+                    <div class="card text-white bg-success shadow border-0">
                         <div class="card-body">
-                            <h5 class="card-title">Doanh thu tuần</h5>
-                            <h3 class="card-text" id="statRevenue">--</h3>
+                            <h6 class="card-title text-uppercase fw-bold opacity-75">Tổng Doanh Thu</h6>
+                            <h3 class="card-text fw-bold" id="statRevenue">0 ₫</h3>
                         </div>
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <div class="card text-white bg-warning shadow text-dark">
+                    <div class="card text-dark bg-warning shadow border-0">
                         <div class="card-body">
-                            <h5 class="card-title">Khách hàng mới</h5>
-                            <h3 class="card-text" id="statNewUsers">--</h3>
+                            <h6 class="card-title text-uppercase fw-bold opacity-75">Đơn Hôm Nay</h6>
+                            <h3 class="card-text fw-bold" id="statTodayOrders">--</h3>
                         </div>
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <div class="card text-white bg-danger shadow">
+                    <div class="card text-white bg-danger shadow border-0">
                         <div class="card-body">
-                            <h5 class="card-title">Sắp hết hạn</h5>
-                            <h3 class="card-text" id="statWarnings">--</h3>
+                            <h6 class="card-title text-uppercase fw-bold opacity-75">Doanh Thu Hôm Nay</h6>
+                            <h3 class="card-text fw-bold" id="statTodayRevenue">--</h3>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="card shadow">
-                <div class="card-header bg-white">
-                    <h5 class="mb-0">Biểu đồ doanh thu 7 ngày qua</h5>
-                </div>
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-white fw-bold"><i class="fas fa-chart-line text-primary"></i> Biểu đồ doanh thu 7 ngày qua</div>
                 <div class="card-body">
-                    <canvas id="revenueChart" height="100"></canvas>
+                    <canvas id="revenueChart" height="80"></canvas>
+                </div>
+            </div>
+
+            <div class="row mb-4">
+                <div class="col-md-5 mb-4">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-header bg-white fw-bold">Tỷ lệ Kênh Giao Hàng</div>
+                        <div class="card-body d-flex justify-content-center">
+                            <div style="width: 250px; height: 250px;">
+                                <canvas id="methodChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-7 mb-4">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-header bg-white fw-bold">Top 5 Bánh Bán Chạy Nhất</div>
+                        <div class="card-body">
+                            <canvas id="topProductChart" style="max-height: 250px;"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mb-5">
+                <div class="card-header bg-white fw-bold"><i class="fas fa-ticket-alt text-warning"></i> Hiệu quả Voucher</div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light position-sticky top-0" style="z-index: 1; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
+                                <tr>
+                                    <th>Mã Voucher</th>
+                                    <th>Số đơn hàng đã mang về</th>
+                                </tr>
+                            </thead>
+                            <tbody id="voucherStatBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -85,72 +122,141 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // Phần bảo mật
+            // Bảo mật
             const token = localStorage.getItem('bakery_token');
             const userInfoRaw = localStorage.getItem('bakery_user');
 
             if (!token || !userInfoRaw) {
-                window.location.replace('/login.html');
-                return;
+                window.location.replace('login.html'); return;
             }
 
             const userInfo = JSON.parse(userInfoRaw);
             if (userInfo.roleId !== 2) {
-                alert('Truy cập bị từ chối: Bạn không có quyền quản trị viên!');
-                window.location.replace('/index.html');
-                return;
+                alert('Truy cập bị từ chối!'); window.location.replace('index.html'); return;
             }
             document.getElementById('adminNameDisplay').innerText = `Xin chào, ${userInfo.fullName}!`;
 
-            // Dữ liệu giả lập để trưng bày
-            const mockData = {
-                orders: 28,
-                revenue: 16500000,
-                newUsers: 12,
-                warnings: 3,
-                chartLabels: ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'],
-                chartData: [1500000, 2100000, 1800000, 2900000, 3200000, 4500000, 5100000]
-            };
+            // Tải dữ liệu
+            async function loadDashboard() {
+                try {
+                    const res = await fetch('http://localhost:3000/api/admin/statistics', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (!res.ok) throw new Error('Hết phiên đăng nhập');
+                    const data = await res.json();
 
-            // Đổ dữ liệu vào giao diện
-            document.getElementById('statOrders').innerText = mockData.orders;
-            document.getElementById('statRevenue').innerText = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(mockData.revenue);
-            document.getElementById('statNewUsers').innerText = mockData.newUsers;
-            document.getElementById('statWarnings').innerText = mockData.warnings;
+                    // 1. Điền data 4 thẻ tổng quan
+                    document.getElementById('statRevenue').innerText = Number(data.overview.TotalRevenue || 0).toLocaleString('vi-VN') + ' ₫';
+                    document.getElementById('statOrders').innerText = (data.overview.TotalOrders || 0) + ' đơn';
 
-            // Biểu đồ
-            const ctx = document.getElementById('revenueChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: mockData.chartLabels,
-                    datasets: [{
-                        label: 'Doanh thu',
-                        data: mockData.chartData,
-                        borderColor: '#0d6efd',
-                        backgroundColor: 'rgba(13, 110, 253, 0.1)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.3
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { display: false } }
+                    // Tính chuỗi 7 ngày cho Biểu đồ đường (Xử lý cả những ngày không có đơn)
+                    const last7DaysLabels = [];
+                    const last7DaysData = [];
+                    let todayRevenue = 0;
+                    let todayOrders = 0; 
+
+                    for (let i = 6; i >= 0; i--) {
+                        const d = new Date();
+                        d.setDate(d.getDate() - i);
+                        
+                        const year = d.getFullYear();
+                        const month = String(d.getMonth() + 1).padStart(2, '0');
+                        const day = String(d.getDate()).padStart(2, '0');
+                        const dateStr = `${year}-${month}-${day}`; 
+
+                        last7DaysLabels.push(`${day}/${month}`);
+
+                        // Tìm trong data từ DB xem ngày này có bán được không
+                        const record = data.dailyRevenue.find(r => r.OrderDate && r.OrderDate.startsWith(dateStr));
+                        
+                        const dailyMoney = record ? Number(record.DailyTotal) : 0;
+                        const dailyCount = record ? Number(record.DailyOrders) : 0; // Lấy số đơn từ DB
+
+                        last7DaysData.push(dailyMoney);
+
+                        // Nếu i === 0 tức là vòng lặp đang chạy ở "Hôm nay"
+                        if (i === 0) {
+                            todayRevenue = dailyMoney; 
+                            todayOrders = dailyCount; 
+                        }
+                    }
+
+                    // Đổ dữ liệu vào 2 ô Đơn Hôm Nay và Doanh Thu Hôm Nay
+                    document.getElementById('statTodayRevenue').innerText = todayRevenue.toLocaleString('vi-VN') + ' ₫';
+                    document.getElementById('statTodayOrders').innerText = todayOrders + ' đơn';
+
+                    // 2. Vẽ biểu đồ đường 7 ngày
+                    new Chart(document.getElementById('revenueChart'), {
+                        type: 'line',
+                        data: {
+                            labels: last7DaysLabels,
+                            datasets: [{
+                                label: 'Doanh thu (VNĐ)',
+                                data: last7DaysData,
+                                borderColor: '#0d6efd',
+                                backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                                borderWidth: 3, fill: true, tension: 0.3, pointRadius: 5
+                            }]
+                        },
+                        options: { responsive: true, plugins: { legend: { display: false } } }
+                    });
+
+                    // 3. Vẽ biểu đồ tròn
+                    new Chart(document.getElementById('methodChart'), {
+                        type: 'doughnut',
+                        data: {
+                            labels: data.methods.map(m => m.DeliveryMethod),
+                            datasets: [{
+                                data: data.methods.map(m => m.OrderCount),
+                                backgroundColor: ['#0d6efd', '#198754', '#ffc107']
+                            }]
+                        }, options: { maintainAspectRatio: false }
+                    });
+
+                    // 4. Vẽ biểu đồ cột
+                    new Chart(document.getElementById('topProductChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: data.topProducts.map(p => p.ProductName),
+                            datasets: [{
+                                label: 'Số lượng đã bán',
+                                data: data.topProducts.map(p => p.TotalSold),
+                                backgroundColor: '#ffc107', borderRadius: 5
+                            }]
+                        }, 
+                        options: { 
+                            maintainAspectRatio: false,
+                            scales: { 
+                                y: { 
+                                    beginAtZero: true, 
+                                    ticks: { 
+                                        stepSize: 1,      
+                                        precision: 0      
+                                    } 
+                                } 
+                            }
+                        }
+                    });
+
+                    // 5. Bảng voucher
+                    const tbody = document.getElementById('voucherStatBody');
+                    if (data.vouchers.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">Chưa có dữ liệu</td></tr>';
+                    } else {
+                        data.vouchers.forEach(v => {
+                            tbody.innerHTML += `<tr><td class="fw-bold text-primary">${v.VoucherCode}</td><td><span class="badge bg-success fs-6">${v.UsageCount} đơn</span></td></tr>`;
+                        });
+                    }
+
+                } catch (error) {
+                    console.error('Lỗi:', error);
                 }
-            });
-        });
-
-        // Nút đăng xuất
-        document.getElementById('btnAdminLogout').addEventListener('click', (e) => {
-            e.preventDefault();
-            if(confirm('Bạn có chắc chắn muốn đăng xuất khỏi trang quản trị?')) {
-                // Xóa sạch bộ nhớ
-                localStorage.removeItem('bakery_token');
-                localStorage.removeItem('bakery_user');
-                // Chuyển thẳng ra trang đăng nhập
-                window.location.replace('login.html');
             }
+            loadDashboard();
+
+            document.getElementById('btnAdminLogout').addEventListener('click', () => {
+                if(confirm('Thoát?')) { localStorage.clear(); window.location.replace('login.html'); }
+            });
         });
     </script>
 </body>

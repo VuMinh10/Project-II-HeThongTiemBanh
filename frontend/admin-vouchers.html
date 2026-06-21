@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý Khuyến mãi - Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold text-warning" href="admin-dashboard.html">Admin Panel</a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="admin-dashboard.html">Thống kê</a></li>
+                    <li class="nav-item"><a class="nav-link" href="admin-products.html">Sản phẩm</a></li>
+                    <li class="nav-item"><a class="nav-link" href="admin-orders.html">Đơn hàng</a></li>
+                    <li class="nav-item"><a class="nav-link active" href="admin-vouchers.html">Khuyến mãi</a></li>
+                </ul>
+                <a href="index.html" class="btn btn-outline-light btn-sm">Xem trang khách</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4 px-4">
+        <h2 class="fw-bold mb-4">Quản lý Mã Giảm Giá (Voucher)</h2>
+
+        <div class="row">
+            <div class="col-md-4">
+                <div class="card shadow-sm border-0 mb-4">
+                    <div class="card-header bg-primary text-white fw-bold">Tạo mã Voucher mới</div>
+                    <div class="card-body">
+                        <form id="voucherForm">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Mã Voucher (Code)</label>
+                                <input type="text" id="txtCode" class="form-control text-uppercase" required placeholder="VD: FREESHIP, TET2026">
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <label class="form-label">Loại giảm</label>
+                                    <select id="selType" class="form-select" onchange="toggleMaxDiscount()">
+                                        <option value="TienMat">Trừ tiền (VNĐ)</option>
+                                        <option value="PhanTram">Phần trăm (%)</option>
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Giá trị</label>
+                                    <input type="number" id="txtValue" class="form-control" required placeholder="VD: 15000">
+                                </div>
+                            </div>
+
+                            <div class="mb-3 d-none" id="boxMaxDiscount">
+                                <label class="form-label text-danger">Giảm tối đa (VNĐ) <small>(Nếu giảm %)</small></label>
+                                <input type="number" id="txtMaxDiscount" class="form-control" placeholder="VD: 30000">
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Đơn tối thiểu áp dụng (VNĐ)</label>
+                                <input type="number" id="txtMinOrder" class="form-control" required value="0">
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <label class="form-label">Giới hạn số lượng</label>
+                                    <input type="number" id="txtUsageLimit" class="form-control" required value="100">
+                                </div>
+                                <div class="col-6"></div>
+                            </div>
+
+                            <div class="row mb-4">
+                                <div class="col-6">
+                                    <label class="form-label">Ngày bắt đầu</label>
+                                    <input type="datetime-local" id="txtStartDate" class="form-control" required>
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label">Ngày kết thúc</label>
+                                    <input type="datetime-local" id="txtEndDate" class="form-control" required>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn btn-success w-100 fw-bold"><i class="fas fa-plus"></i> PHÁT HÀNH MÃ</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-8">
+                <div class="card shadow-sm border-0">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Mã Voucher</th>
+                                        <th>Mức giảm</th>
+                                        <th>Điều kiện</th>
+                                        <th>Đã dùng</th>
+                                        <th>Thời hạn</th>
+                                        <th>Trạng thái</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="voucherTableBody">
+                                    </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Kiểm tra quyền
+        const token = localStorage.getItem('bakery_token');
+        const userRaw = localStorage.getItem('bakery_user');
+
+        if (!token || !userRaw) {
+            alert('Vui lòng đăng nhập!');
+            window.location.replace('login.html');
+        }
+
+        const userInfo = JSON.parse(userRaw);
+        if (userInfo.roleId !== 2) { 
+            alert('Truy cập bị từ chối: Chỉ dành cho Quản trị viên!');
+            window.location.replace('index.html');
+        }
+
+        // 1. Giao diện form
+        function toggleMaxDiscount() {
+            const type = document.getElementById('selType').value;
+            const box = document.getElementById('boxMaxDiscount');
+            if (type === 'PhanTram') {
+                box.classList.remove('d-none');
+            } else {
+                box.classList.add('d-none');
+                document.getElementById('txtMaxDiscount').value = '';
+            }
+        }
+
+        // 2. Tải danh sách voucher
+        async function loadVouchers() {
+            try {
+                const res = await fetch('http://localhost:3000/api/admin/vouchers', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (!res.ok) throw new Error('Không có quyền hoặc phiên đăng nhập hết hạn');
+                
+                const vouchers = await res.json();
+                
+                const tbody = document.getElementById('voucherTableBody');
+                tbody.innerHTML = '';
+                const now = new Date();
+
+                vouchers.forEach(v => {
+                    let discountText = v.DiscountType === 'TienMat' 
+                        ? `<span class="text-danger fw-bold">-${Number(v.DiscountValue).toLocaleString()}đ</span>`
+                        : `<span class="text-danger fw-bold">-${v.DiscountValue}%</span><br><small>Tối đa: ${v.MaxDiscount ? Number(v.MaxDiscount).toLocaleString()+'đ' : 'Không giới hạn'}</small>`;
+
+                    let statusBadge = v.Status === 'Hoạt động' ? '<span class="badge bg-success">Hoạt động</span>' : '<span class="badge bg-secondary">Bị khóa</span>';
+                    
+                    // Kiểm tra hết hạn hiển thị
+                    const endDate = new Date(v.EndDate);
+                    if (endDate < now) statusBadge = '<span class="badge bg-danger">Hết hạn</span>';
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><strong class="fs-5 text-primary">${v.VoucherCode}</strong></td>
+                        <td>${discountText}</td>
+                        <td>Đơn từ ${Number(v.MinOrderValue).toLocaleString()}đ</td>
+                        <td>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-info" style="width: ${(v.UsedCount / v.UsageLimit) * 100}%;">${v.UsedCount}/${v.UsageLimit}</div>
+                            </div>
+                        </td>
+                        <td class="small">
+                            Từ: ${new Date(v.StartDate).toLocaleString()}<br>
+                            Đến: <strong class="text-danger">${endDate.toLocaleString()}</strong>
+                        </td>
+                        <td>${statusBadge}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (error) {
+                console.error('Lỗi tải voucher:', error);
+                alert('Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.');
+                window.location.replace('login.html');
+            }
+        }
+
+        // 3. Tạo mã mới
+        document.getElementById('voucherForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const data = {
+                VoucherCode: document.getElementById('txtCode').value.trim().toUpperCase(),
+                DiscountType: document.getElementById('selType').value,
+                DiscountValue: document.getElementById('txtValue').value,
+                MinOrderValue: document.getElementById('txtMinOrder').value,
+                MaxDiscount: document.getElementById('txtMaxDiscount').value || null,
+                StartDate: document.getElementById('txtStartDate').value,
+                EndDate: document.getElementById('txtEndDate').value,
+                UsageLimit: document.getElementById('txtUsageLimit').value
+            };
+
+            if (new Date(data.StartDate) >= new Date(data.EndDate)) {
+                return alert('Ngày kết thúc phải lớn hơn ngày bắt đầu!');
+            }
+            if (data.DiscountType === 'PhanTram' && data.DiscountValue > 100) {
+                return alert('Giảm phần trăm không được vượt quá 100%!');
+            }
+
+            try {
+                const response = await fetch('http://localhost:3000/api/admin/vouchers', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}` 
+                    },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    alert('🎉 Tạo mã thành công!');
+                    document.getElementById('voucherForm').reset();
+                    loadVouchers();
+                } else {
+                    alert(result.error || 'Có lỗi xảy ra');
+                }
+            } catch (error) {
+                alert('Lỗi kết nối máy chủ!');
+            }
+        });
+
+        loadVouchers();
+    </script>
+</body>
+</html>

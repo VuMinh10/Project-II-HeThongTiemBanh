@@ -541,7 +541,7 @@ app.put('/api/profile', authenticateToken, async (req, res) => {
 });
 
 
-// -- API Đặt hàng & Thanh toán --
+// -- API Đặt hàng & Thanh toán -- (thêm voucher)
 app.post('/api/orders', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
 
@@ -549,10 +549,9 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         await connection.beginTransaction(); 
 
         const userId = req.user.userId;
-
         const { 
             Cart, DeliveryMethod, PaymentMethod, 
-            ReceiverName, ReceiverPhone, ShippingAddress   // TotalAmount tính ở dưới
+            ReceiverName, ReceiverPhone, ShippingAddress, VoucherCode // thêm voucher
         } = req.body;
 
         if (!Cart || Cart.length === 0) {
@@ -564,7 +563,6 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         const processedItems = [];
 
         for (let item of Cart) {
-            // Lấy giá thật và tồn kho thật từ database ra kiểm tra
             const [products] = await connection.execute(
                 'SELECT Price, QuantityAvailable, ProductName FROM Product WHERE ProductID = ?', 
                 [item.ProductID]
@@ -576,16 +574,13 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
 
             const dbProduct = products[0];
 
-            // Kiểm tra tồn kho trước
             if (dbProduct.QuantityAvailable < item.quantity) {
                 throw new Error(`Bánh "${dbProduct.ProductName}" chỉ còn ${dbProduct.QuantityAvailable} chiếc trong kho!`);
             }
 
-            // Tính tiền dựa trên giá gốc của database
             const realSubTotal = dbProduct.Price * item.quantity;
             realTotalAmount += realSubTotal;
 
-            // Lưu tạm vào mảng, lưu vào db sau
             processedItems.push({
                 productID: item.ProductID,
                 quantity: item.quantity,
@@ -594,40 +589,74 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
             });
         }
 
-        // 2. Tạo hóa đơn
+        // 2. Kiểm tra và áp dụng voucher
+        let finalTotal = realTotalAmount;
+        
+        if (VoucherCode) {
+            const [vouchers] = await connection.execute('SELECT * FROM Voucher WHERE VoucherCode = ? AND Status = "Hoạt động"', [VoucherCode]);
+            if (vouchers.length === 0) throw new Error('Mã giảm giá không hợp lệ hoặc đã bị khóa.');
+            
+            const v = vouchers[0];
+            const now = new Date();
+            
+            if (new Date(v.StartDate) > now) throw new Error('Mã chưa đến giờ mở bán.');
+            if (new Date(v.EndDate) < now) throw new Error('Mã đã hết hạn sử dụng.');
+            if (v.UsedCount >= v.UsageLimit) throw new Error('Mã đã hết lượt sử dụng.');
+            if (realTotalAmount < v.MinOrderValue) throw new Error(`Đơn hàng phải từ ${Number(v.MinOrderValue).toLocaleString('vi-VN')}đ mới được áp dụng mã này.`);
+            
+            const [usedOrders] = await connection.execute('SELECT OrderID FROM `Order` WHERE UserID = ? AND VoucherCode = ? AND Status != "Đã hủy"', [userId, VoucherCode]);
+            if (usedOrders.length > 0) throw new Error('Bạn đã sử dụng mã này rồi.');
+
+            let discountAmount = 0;
+            if (v.DiscountType === 'TienMat') {
+                discountAmount = Number(v.DiscountValue);
+            } else {
+                discountAmount = (realTotalAmount * Number(v.DiscountValue)) / 100;
+                if (v.MaxDiscount && discountAmount > v.MaxDiscount) discountAmount = Number(v.MaxDiscount);
+            }
+
+            finalTotal = realTotalAmount - discountAmount;
+            if (finalTotal < 0) finalTotal = 0; // Chống giá âm
+
+            // Cộng 1 lượt dùng cho Voucher
+            await connection.execute('UPDATE Voucher SET UsedCount = UsedCount + 1 WHERE VoucherCode = ?', [VoucherCode]);
+        }
+
+        // 3. Lưu hóa đơn
         const sqlOrder = `
             INSERT INTO \`Order\` 
-            (UserID, TotalAmount, DeliveryMethod, PaymentMethod, Status, ReceiverName, ReceiverPhone, ShippingAddress) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (UserID, TotalAmount, DeliveryMethod, PaymentMethod, Status, ReceiverName, ReceiverPhone, ShippingAddress, VoucherCode) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
         const [orderResult] = await connection.execute(sqlOrder, [
-            userId, realTotalAmount, DeliveryMethod, PaymentMethod, 'Chờ xác nhận', ReceiverName, ReceiverPhone, ShippingAddress
+            userId, finalTotal, DeliveryMethod, PaymentMethod, 'Chờ xác nhận', ReceiverName, ReceiverPhone, ShippingAddress, VoucherCode || null
         ]);
         
         const newOrderId = orderResult.insertId; 
 
-        // 3. Lưu datail và trừ tồn kho
+        // 4. Lưu datail và trừ tồn kho
         for (let item of processedItems) {
-            // Lưu OrderDetail
-            const sqlDetail = `INSERT INTO OrderDetail (OrderID, ProductID, Quantity, UnitPrice, SubTotal) VALUES (?, ?, ?, ?, ?)`;
-            await connection.execute(sqlDetail, [newOrderId, item.productID, item.quantity, item.realUnitPrice, item.realSubTotal]);
+            await connection.execute(
+                `INSERT INTO OrderDetail (OrderID, ProductID, Quantity, UnitPrice, SubTotal) VALUES (?, ?, ?, ?, ?)`, 
+                [newOrderId, item.productID, item.quantity, item.realUnitPrice, item.realSubTotal]
+            );
 
-            // Trừ tồn kho 
-            const sqlUpdateStock = `UPDATE Product SET QuantityAvailable = QuantityAvailable - ? WHERE ProductID = ? AND QuantityAvailable >= ?`;
-            const [updateResult] = await connection.execute(sqlUpdateStock, [item.quantity, item.productID, item.quantity]);
+            const [updateResult] = await connection.execute(
+                `UPDATE Product SET QuantityAvailable = QuantityAvailable - ? WHERE ProductID = ? AND QuantityAvailable >= ?`, 
+                [item.quantity, item.productID, item.quantity]
+            );
 
             if (updateResult.affectedRows === 0) {
-                throw new Error(`Đã có khách hàng khác nhanh tay mua hết bánh này. Vui lòng tải lại giỏ hàng!`);
+                throw new Error(`Đã có khách khác nhanh tay mua hết bánh "${item.ProductName}". Vui lòng thử lại!`);
             }
         }
 
         await connection.commit();
-        res.status(201).json({ message: 'Đặt hàng thành công!', orderId: newOrderId, finalTotal: realTotalAmount });
+        res.status(201).json({ message: 'Đặt hàng thành công!', orderId: newOrderId, finalTotal: finalTotal });
 
     } catch (error) {
         await connection.rollback();
         console.error('[Order Transaction Error]:', error);
-        
         res.status(400).json({ error: error.message || 'Lỗi hệ thống khi xử lý đơn hàng.' });
     } finally {
         connection.release(); 
@@ -757,6 +786,159 @@ app.get('/api/orders/:id/details', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('[Customer Get Order Details Error]:', error);
         res.status(500).json({error: 'Lỗi máy chủ khi lấy chi tiết đơn hàng.'});
+    }
+});
+
+// -- API Quản lý voucher và Khuyến mãi --
+
+// 1. Thêm Voucher mới 
+app.post('/api/admin/vouchers', authenticateToken, isAdmin, async (req, res) => {
+    const { VoucherCode, DiscountType, DiscountValue, MinOrderValue, MaxDiscount, StartDate, EndDate, UsageLimit } = req.body;
+    
+    if (!VoucherCode || !DiscountType || !DiscountValue) {
+        return res.status(400).json({ error: 'Vui lòng nhập đủ Mã, Loại giảm và Giá trị giảm.' });
+    }
+
+    try {
+        const sql = `
+            INSERT INTO Voucher (VoucherCode, DiscountType, DiscountValue, MinOrderValue, MaxDiscount, StartDate, EndDate, UsageLimit) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+        await pool.execute(sql, [
+            VoucherCode.toUpperCase(), 
+            DiscountType, 
+            DiscountValue, 
+            MinOrderValue || 0, 
+            MaxDiscount || null, 
+            StartDate, 
+            EndDate, 
+            UsageLimit || 100
+        ]);
+        res.status(201).json({ message: 'Tạo mã Voucher thành công!' });
+    } catch (error) {
+        console.error('[Create Voucher Error]:', error);
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ error: 'Mã Voucher này đã tồn tại, vui lòng chọn tên khác!' });
+        }
+        res.status(500).json({ error: 'Lỗi máy chủ nội bộ.' });
+    }
+});
+
+// 2. Lấy danh sách Voucher 
+app.get('/api/admin/vouchers', authenticateToken, isAdmin, async (req, res) => {
+    try {
+        const [vouchers] = await pool.execute('SELECT * FROM Voucher ORDER BY EndDate DESC');
+        res.status(200).json(vouchers);
+    } catch (error) {
+        console.error('[Get Vouchers Error]:', error);
+        res.status(500).json({ error: 'Lỗi khi lấy danh sách Voucher' });
+    }
+});
+
+// 3. Kiểm tra và Áp dụng voucher
+app.post('/api/vouchers/apply', authenticateToken, async (req, res) => {
+    const { VoucherCode, OrderTotal } = req.body;
+    
+    const userId = req.user.userId;
+    
+    try {
+        //Tìm mã trong DB
+        const [vouchers] = await pool.execute('SELECT * FROM Voucher WHERE VoucherCode = ? AND Status = "Hoạt động"', [VoucherCode]);
+        if (vouchers.length === 0) return res.status(404).json({ error: 'Mã không tồn tại hoặc đã bị khóa.' });
+        
+        const v = vouchers[0];
+        const now = new Date();
+        
+        //Check ngày và số lượng
+        if (new Date(v.StartDate) > now) return res.status(400).json({ error: 'Mã chưa đến giờ mở bán.' });
+        if (new Date(v.EndDate) < now) return res.status(400).json({ error: 'Mã đã hết hạn sử dụng.' });
+        if (v.UsedCount >= v.UsageLimit) return res.status(400).json({ error: 'Mã đã hết lượt (Số lượng có hạn).' });
+        if (OrderTotal < v.MinOrderValue) return res.status(400).json({ error: `Đơn hàng phải từ ${Number(v.MinOrderValue).toLocaleString('vi-VN')}đ mới được áp dụng.` });
+        
+        //Check lịch sử xem khách này đã từng dùng mã này chưa
+        const [usedOrders] = await pool.execute(
+            'SELECT OrderID FROM `Order` WHERE UserID = ? AND VoucherCode = ? AND Status != "Đã hủy"', 
+            [userId, VoucherCode]
+        );
+        if (usedOrders.length > 0) return res.status(400).json({ error: 'Bạn đã sử dụng mã này rồi, không thể dùng lại!' });
+        
+        //Tính toán số tiền được giảm
+        let discountAmount = 0;
+        if (v.DiscountType === 'TienMat') {
+            discountAmount = Number(v.DiscountValue);
+        } else if (v.DiscountType === 'PhanTram') {
+            discountAmount = (OrderTotal * Number(v.DiscountValue)) / 100;
+            if (v.MaxDiscount && discountAmount > v.MaxDiscount) {
+                discountAmount = Number(v.MaxDiscount);
+            }
+        }
+        
+        res.status(200).json({ 
+            message: 'Áp dụng mã thành công!', 
+            discountAmount: discountAmount 
+        });
+
+    } catch (error) {
+        console.error('[Apply Voucher Error]:', error);
+        res.status(500).json({ error: 'Lỗi máy chủ khi kiểm tra mã.' });
+    }
+});
+
+// -- API Báo cóa thống kê (Dashboard) --
+
+app.get('/api/admin/statistics', authenticateToken, isAdmin, async (req, res) => {
+    try {
+        // 1. Tổng Doanh thu và Số đơn (Tất cả thời gian)
+        const [overview] = await pool.execute(`
+            SELECT IFNULL(SUM(TotalAmount), 0) as TotalRevenue, COUNT(OrderID) as TotalOrders 
+            FROM \`Order\` WHERE Status = 'Đã hoàn thành'
+        `);
+
+        // 2. Tỷ lệ kênh giao hàng
+        const [methods] = await pool.execute(`
+            SELECT DeliveryMethod, COUNT(OrderID) as OrderCount 
+            FROM \`Order\` WHERE Status != 'Đã hủy' GROUP BY DeliveryMethod
+        `);
+
+        // 3. Top 5 sản phẩm bán chạy nhất
+        const [topProducts] = await pool.execute(`
+            SELECT p.ProductName, SUM(od.Quantity) as TotalSold 
+            FROM OrderDetail od 
+            JOIN Product p ON od.ProductID = p.ProductID 
+            JOIN \`Order\` o ON od.OrderID = o.OrderID
+            WHERE o.Status = 'Đã hoàn thành'
+            GROUP BY od.ProductID ORDER BY TotalSold DESC LIMIT 5
+        `);
+
+        // 4. Thống kê Voucher
+        const [voucherStats] = await pool.execute(`
+            SELECT VoucherCode, COUNT(OrderID) as UsageCount 
+            FROM \`Order\` WHERE VoucherCode IS NOT NULL AND Status = 'Đã hoàn thành'
+            GROUP BY VoucherCode ORDER BY UsageCount DESC
+        `);
+
+        // 5. Doanh thu 7 ngày qua (Nhóm theo ngày)
+        const [dailyRevenue] = await pool.execute(`
+            SELECT 
+                DATE_FORMAT(OrderDate, '%Y-%m-%d') as OrderDate, 
+                SUM(TotalAmount) as DailyTotal,
+                COUNT(OrderID) as DailyOrders 
+            FROM \`Order\`
+            WHERE OrderDate >= CURDATE() - INTERVAL 6 DAY AND Status = 'Đã hoàn thành'
+            GROUP BY DATE_FORMAT(OrderDate, '%Y-%m-%d') 
+            ORDER BY OrderDate ASC
+        `);
+
+        res.status(200).json({
+            overview: overview[0],
+            methods: methods,
+            topProducts: topProducts,
+            vouchers: voucherStats,
+            dailyRevenue: dailyRevenue // Trả mảng 7 ngày về cho Frontend
+        });
+    } catch (error) {
+        console.error('[Admin Dashboard Stats Error]:', error);
+        res.status(500).json({ error: 'Lỗi truy xuất dữ liệu báo cáo' });
     }
 });
 

@@ -55,8 +55,9 @@
 
                     <div class="card-footer bg-white p-3 border-top">
                         <div class="input-group input-group-sm mb-3">
-                            <input type="text" id="txtVoucher" class="form-control" placeholder="Mã giảm giá (Thử: GIAM10K)">
-                            <button class="btn btn-outline-success" onclick="applyVoucher()">Áp dụng</button>
+                            <input type="text" id="txtVoucher" class="form-control text-uppercase" placeholder="Mã giảm giá...">
+                            <button class="btn btn-outline-success" id="btnPosApplyVoucher" onclick="applyVoucher()">Áp dụng</button>
+                            <button class="btn btn-outline-danger d-none" id="btnPosRemoveVoucher" onclick="removeVoucher()">Hủy mã</button>
                         </div>
 
                         <div class="d-flex justify-content-between mb-1">
@@ -124,6 +125,7 @@
         let allProducts = [];
         let posCart = [];
         let discountAmount = 0;
+        let appliedVoucherCode = null;
 
         // 1. Tải danh sách bánh
         async function loadPosProducts() {
@@ -233,21 +235,73 @@
         }
 
         // 5. Áp dụng Voucher
-        function applyVoucher() {
-            const code = document.getElementById('txtVoucher').value.trim().toUpperCase();
-            if (code === 'GIAM10K') {
-                discountAmount = 10000;
-                document.getElementById('voucherCodeLabel').innerText = code;
-                alert('Áp dụng mã thành công!');
-            } else if (code === '') {
-                discountAmount = 0;
-                document.getElementById('voucherCodeLabel').innerText = 'Không';
-            } else {
-                alert('Mã giảm giá không hợp lệ!');
+        async function applyVoucher() {
+            const codeInput = document.getElementById('txtVoucher').value.trim().toUpperCase();
+            
+            if (!codeInput) {
+                removeVoucher(); // Nếu để trống mà bấm áp dụng thì gọi luôn hàm Hủy
+                return;
+            }
+
+            let currentSubTotal = posCart.reduce((sum, item) => sum + (item.Price * item.quantity), 0);
+            if (currentSubTotal === 0) return alert('Vui lòng chọn bánh trước khi áp mã!');
+
+            try {
+                const btnApply = document.getElementById('btnPosApplyVoucher');
+                btnApply.innerHTML = '...'; btnApply.disabled = true;
+
+                const response = await fetch('http://localhost:3000/api/vouchers/apply', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}` 
+                    },
+                    body: JSON.stringify({ VoucherCode: codeInput, OrderTotal: currentSubTotal })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    discountAmount = result.discountAmount;
+                    appliedVoucherCode = codeInput;
+                    document.getElementById('voucherCodeLabel').innerText = codeInput;
+                    document.getElementById('txtVoucher').readOnly = true; // Khóa ô nhập
+
+                    // Ẩn nút Áp dụng, Hiện nút Hủy
+                    btnApply.classList.add('d-none');
+                    document.getElementById('btnPosRemoveVoucher').classList.remove('d-none');
+                    
+                    alert('🎉 ' + result.message);
+                } else {
+                    removeVoucher(); // Lỗi thì reset hết
+                    alert('Lỗi: ' + result.error);
+                }
+                
+                btnApply.innerHTML = 'Áp dụng'; btnApply.disabled = false;
+            } catch (error) {
+                alert('Lỗi kết nối máy chủ!');
             }
             renderPosCart();
         }
 
+        // Hàm rút lại voucher
+        function removeVoucher() {
+            discountAmount = 0;
+            appliedVoucherCode = null;
+            
+            const txtCode = document.getElementById('txtVoucher');
+            txtCode.value = '';
+            txtCode.readOnly = false; // Mở khóa ô nhập
+            
+            document.getElementById('voucherCodeLabel').innerText = 'Không';
+            
+            // Ẩn nút Hủy, Hiện lại nút Áp dụng
+            document.getElementById('btnPosRemoveVoucher').classList.add('d-none');
+            document.getElementById('btnPosApplyVoucher').classList.remove('d-none');
+            
+            renderPosCart(); // Tính lại hóa đơn
+        }
+        
         // 6. Chốt đơn và gọi API
         async function checkoutPos() {
             if (posCart.length === 0) return alert('Hóa đơn trống!');
@@ -256,14 +310,14 @@
             let finalTotal = subTotal - discountAmount;
             if(finalTotal < 0) finalTotal = 0;
 
-            // Dữ liệu rút gọn, để Backend tự lo UserID và Total
             const orderData = {
                 Cart: posCart,
                 DeliveryMethod: 'Nhận tại quầy',
                 PaymentMethod: document.getElementById('posPaymentMethod').value,
                 ReceiverName: 'Khách mua trực tiếp',
                 ReceiverPhone: 'N/A',
-                ShippingAddress: 'Tại quầy POS'
+                ShippingAddress: 'Tại quầy POS',
+                VoucherCode: appliedVoucherCode // Đã nhét mã Voucher vào đây
             };
 
             try {
@@ -275,7 +329,7 @@
                     method: 'POST',
                     headers: { 
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}` // Mang theo thẻ bài
+                        'Authorization': `Bearer ${token}` 
                     },
                     body: JSON.stringify(orderData)
                 });
@@ -284,7 +338,6 @@
                     preparePrint(subTotal, discountAmount, finalTotal); 
                     window.print(); 
 
-                    // Cập nhật trạng thái thành 'Hoàn thành' cho đơn POS
                     const result = await res.json();
                     if (result.orderId) {
                         await fetch(`http://localhost:3000/api/admin/orders/${result.orderId}/status`, {
@@ -297,12 +350,9 @@
                         });
                     }
 
-                    // Reset lại POS
+                    // Reset lại POS cho khách tiếp theo
                     posCart = [];
-                    discountAmount = 0;
-                    document.getElementById('txtVoucher').value = '';
-                    document.getElementById('voucherCodeLabel').innerText = 'Không';
-                    renderPosCart();
+                    removeVoucher(); // Gọi hàm này để tự động dọn sạch tiền giảm, mở khóa ô nhập, đổi lại nút Áp dụng
                     loadPosProducts(); 
                 } else {
                     const err = await res.json();

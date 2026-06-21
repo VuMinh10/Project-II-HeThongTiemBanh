@@ -77,9 +77,20 @@
                         <ul class="list-group list-group-flush mb-3 bg-transparent" id="orderSummaryList">
                             </ul>
                         
+                        <div class="input-group mb-3 border-bottom pb-3">
+                            <input type="text" id="txtVoucherCode" class="form-control text-uppercase" placeholder="Nhập mã giảm giá...">
+                            <button class="btn btn-outline-success" type="button" onclick="applyVoucher()" id="btnApplyVoucher">Áp dụng</button>
+                            <button class="btn btn-outline-danger d-none" type="button" onclick="removeVoucher()" id="btnRemoveVoucher">Hủy mã</button>
+                        </div>
+                        <div id="voucherMessage" class="small mb-3"></div>
+
                         <div class="d-flex justify-content-between mb-2">
                             <span class="text-muted">Tạm tính:</span>
                             <span class="fw-bold" id="checkoutSubTotal">0 ₫</span>
+                        </div>
+                        <div class="d-flex justify-content-between mb-2 text-success">
+                            <span>Giảm giá Voucher:</span>
+                            <span id="checkoutDiscountAmount">- 0 ₫</span>
                         </div>
                         <div class="d-flex justify-content-between mb-3 border-bottom pb-3">
                             <span class="text-muted">Phí vận chuyển:</span>
@@ -124,31 +135,31 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // 1. Kiểm tra token
+            // 1. Bảo mật và lấy thông tin
             const token = localStorage.getItem('bakery_token');
             const userRaw = localStorage.getItem('bakery_user');
 
             if (!token || !userRaw) {
                 alert('Vui lòng đăng nhập trước khi tiến hành thanh toán!');
-                window.location.href = 'login.html';
-                return; // Dừng lại ngay lập tức
+                window.location.replace('login.html');
+                return;
             }
 
             const userInfo = JSON.parse(userRaw);
 
-            // 2. Tải giỏ hàng
+            // 2. Khởi tạo dữ liệu
             let cart = JSON.parse(localStorage.getItem('bakery_cart')) || [];
-            let totalAmount = 0;
+            let totalAmount = 0; // Tiền gốc
+            let discountAmount = 0; // Tiền được giảm
+            let appliedVoucherCode = null; // Mã đang áp dụng
 
             if (cart.length === 0) {
                 alert('Giỏ hàng của bạn đang trống! Hãy chọn bánh trước khi thanh toán.');
-                window.location.href = 'index.html';
+                window.location.replace('index.html');
                 return;
             }
 
-            // Tự động điền Tên khách hàng vào form
             document.getElementById('txtReceiverName').value = userInfo.fullName || '';
-
             const paymentModal = new bootstrap.Modal(document.getElementById('paymentModal'));
 
             // 3. Render giỏ hàng
@@ -160,58 +171,122 @@
                 cart.forEach(item => {
                     const itemTotal = item.Price * item.quantity;
                     totalAmount += itemTotal;
-
-                    const li = document.createElement('li');
-                    li.className = 'list-group-item d-flex justify-content-between align-items-center bg-transparent px-0';
-                    li.innerHTML = `
-                        <div class="d-flex align-items-center">
-                            <span class="badge bg-secondary rounded-pill me-2">${item.quantity}</span>
-                            <span>${item.ProductName}</span>
-                        </div>
-                        <span>${Number(itemTotal).toLocaleString('vi-VN')} ₫</span>
+                    summaryList.innerHTML += `
+                        <li class="list-group-item d-flex justify-content-between align-items-center bg-transparent px-0">
+                            <div class="d-flex align-items-center">
+                                <span class="badge bg-secondary rounded-pill me-2">${item.quantity}</span>
+                                <span>${item.ProductName}</span>
+                            </div>
+                            <span>${Number(itemTotal).toLocaleString('vi-VN')} ₫</span>
+                        </li>
                     `;
-                    summaryList.appendChild(li);
                 });
+                updateTotalDisplay();
+            }
+
+            function updateTotalDisplay() {
+                let finalTotal = totalAmount - discountAmount;
+                if(finalTotal < 0) finalTotal = 0;
 
                 document.getElementById('checkoutSubTotal').innerText = Number(totalAmount).toLocaleString('vi-VN') + ' ₫';
-                document.getElementById('checkoutFinalTotal').innerText = Number(totalAmount).toLocaleString('vi-VN') + ' ₫';
+                document.getElementById('checkoutDiscountAmount').innerText = '- ' + Number(discountAmount).toLocaleString('vi-VN') + ' ₫';
+                document.getElementById('checkoutFinalTotal').innerText = Number(finalTotal).toLocaleString('vi-VN') + ' ₫';
+                document.getElementById('qrTotalAmount').innerText = Number(finalTotal).toLocaleString('vi-VN') + ' ₫';
+            }
+
+            // 4. API kiểm tra và áp dụng voucher
+            window.applyVoucher = async function() {
+                const codeInput = document.getElementById('txtVoucherCode').value.trim().toUpperCase();
+                const msgBox = document.getElementById('voucherMessage');
+                const btnApply = document.getElementById('btnApplyVoucher');
+                const btnRemove = document.getElementById('btnRemoveVoucher'); // <-- VÁ LỖI 1: Đã khai báo biến này
                 
-                // Cập nhật giá tiền vào modal QR 
-                document.getElementById('qrTotalAmount').innerText = Number(totalAmount).toLocaleString('vi-VN') + ' ₫';
-            }
+                if (!codeInput) return alert('Vui lòng nhập mã giảm giá!');
 
-            // 4. Ẩn/hiện địa chỉ
-            const selDeliveryMethod = document.getElementById('selDeliveryMethod');
-            if(selDeliveryMethod) {
-                selDeliveryMethod.addEventListener('change', () => {
-                    const method = selDeliveryMethod.value;
-                    const addressBox = document.getElementById('addressBox');
-                    const txtAddress = document.getElementById('txtAddress');
+                try {
+                    btnApply.innerHTML = 'Đang kiểm tra...';
+                    btnApply.disabled = true;
 
-                    if (method === 'Nhận tại quầy') {
-                        addressBox.classList.add('d-none');
-                        txtAddress.required = false;
-                        txtAddress.value = '';
+                    const response = await fetch('http://localhost:3000/api/vouchers/apply', {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}` 
+                        },
+                        body: JSON.stringify({ VoucherCode: codeInput, OrderTotal: totalAmount })
+                    });
+
+                    const result = await response.json();
+
+                    if (response.ok) {
+                        appliedVoucherCode = codeInput;
+                        discountAmount = result.discountAmount;
+                        msgBox.innerHTML = `<span class="text-success fw-bold"><i class="fas fa-check-circle"></i> ${result.message}</span>`;
+                        document.getElementById('txtVoucherCode').readOnly = true; 
+
+                        btnApply.classList.add('d-none');
+                        btnRemove.classList.remove('d-none');
+
+                        updateTotalDisplay();
                     } else {
-                        addressBox.classList.remove('d-none');
-                        txtAddress.required = true;
+                        appliedVoucherCode = null;
+                        discountAmount = 0;
+                        msgBox.innerHTML = `<span class="text-danger"><i class="fas fa-times-circle"></i> ${result.error}</span>`;
+                        updateTotalDisplay();
                     }
-                });
+                } catch (error) {
+                    msgBox.innerHTML = '<span class="text-danger">Lỗi kết nối kiểm tra mã.</span>';
+                } finally {
+                    btnApply.innerHTML = 'Áp dụng';
+                    btnApply.disabled = false;
+                }
+            }; 
+
+            // Hàm rút lại voucher
+            window.removeVoucher = function() {
+                appliedVoucherCode = null;       
+                discountAmount = 0;             
+                
+                const txtCode = document.getElementById('txtVoucherCode');
+                txtCode.value = '';              
+                txtCode.readOnly = false;       
+                
+                document.getElementById('voucherMessage').innerHTML = ''; 
+                
+                // Đổi nút hủy thành nút áp dụng
+                document.getElementById('btnRemoveVoucher').classList.add('d-none');
+                document.getElementById('btnApplyVoucher').classList.remove('d-none');
+                
+                updateTotalDisplay();            
+            };
+
+            // 5. Ẩn/hiện địa chỉ
+            window.toggleAddress = function() {
+                const method = document.getElementById('selDeliveryMethod').value;
+                const txtAddress = document.getElementById('txtAddress');
+                if (method === 'Nhận tại quầy') {
+                    document.getElementById('addressBox').classList.add('d-none');
+                    txtAddress.required = false; txtAddress.value = '';
+                } else {
+                    document.getElementById('addressBox').classList.remove('d-none');
+                    txtAddress.required = true;
+                }
             }
 
-            // 5. Xử lý gọi API
+            // 6. Gọi API chốt đơn hàng xuống server
             async function executeOrderPlacement() {
                 const btnSubmit = document.getElementById('btnPlaceOrder');
-                btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Đang xử lý...';
-                btnSubmit.disabled = true;
+                const btnConfirmModal = document.getElementById('btnConfirmPayment');
 
+                // Gửi kèm VoucherCode để Backend check và trừ tiền
                 const orderData = {
                     Cart: cart,
                     DeliveryMethod: document.getElementById('selDeliveryMethod').value,
                     PaymentMethod: document.getElementById('selPaymentMethod').value,
                     ReceiverName: document.getElementById('txtReceiverName').value,
                     ReceiverPhone: document.getElementById('txtReceiverPhone').value,
-                    ShippingAddress: document.getElementById('txtAddress').value || 'Nhận tại quầy'
+                    ShippingAddress: document.getElementById('txtAddress').value || 'Nhận tại quầy',
+                    VoucherCode: appliedVoucherCode 
                 };
 
                 try {
@@ -223,53 +298,57 @@
                         },
                         body: JSON.stringify(orderData)
                     });
-
+                    
                     const result = await response.json();
 
                     if (response.ok) {
-                        alert('🎉 Đặt hàng thành công! Cảm ơn bạn đã mua sắm tại SweetBakery.');
+                        alert('🎉 Đặt hàng thành công!');
                         localStorage.removeItem('bakery_cart'); 
-                        window.location.href = 'order-history.html'; 
+                        window.location.replace('order-history.html'); 
                     } else {
                         alert('Lỗi: ' + result.error);
-                        btnSubmit.innerHTML = 'XÁC NHẬN ĐẶT HÀNG';
-                        btnSubmit.disabled = false;
+                        btnSubmit.innerHTML = 'XÁC NHẬN ĐẶT HÀNG'; btnSubmit.disabled = false;
+                        btnConfirmModal.innerHTML = 'XÁC NHẬN ĐÃ THANH TOÁN'; btnConfirmModal.disabled = false;
                         paymentModal.hide();
                     }
                 } catch (error) {
-                    alert('Không thể kết nối đến máy chủ. Vui lòng thử lại!');
-                    btnSubmit.innerHTML = 'XÁC NHẬN ĐẶT HÀNG';
-                    btnSubmit.disabled = false;
+                    alert('Không thể kết nối đến máy chủ!');
+                    btnSubmit.innerHTML = 'XÁC NHẬN ĐẶT HÀNG'; btnSubmit.disabled = false;
+                    btnConfirmModal.innerHTML = 'XÁC NHẬN ĐÃ THANH TOÁN'; btnConfirmModal.disabled = false;
                     paymentModal.hide();
                 }
             }
 
-            // 6. Sự kiện sumbit form
+            // 7. Sự kiện sumbit form bên ngoài
             document.getElementById('checkoutForm').addEventListener('submit', (e) => {
                 e.preventDefault(); 
                 
                 const paymentMethod = document.getElementById('selPaymentMethod').value;
-
-                // Cứ không phải tiền mặt thì đều hiện mã QR
                 if (paymentMethod !== 'Tiền mặt') {
-                    // Cập nhật lại số tiền cho chắc chắn trước khi bật Modal
+                    // Chuyển khoản hoặc Online thì bật QR
                     document.getElementById('qrTotalAmount').innerText = document.getElementById('checkoutFinalTotal').innerText;
                     paymentModal.show();
                 } else {
+                    // Tiền mặt 
+                    const btnSubmit = document.getElementById('btnPlaceOrder');
+                    btnSubmit.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Đang xử lý...';
+                    btnSubmit.disabled = true;
                     executeOrderPlacement();
                 }
             });
 
-            // 7. Sự kiện trong modal QR
+            // 8. Sự kiện bấm xác nhận trong modal QR
             document.getElementById('btnConfirmPayment').addEventListener('click', () => {
-                const btnConfirm = document.getElementById('btnConfirmPayment');
-                btnConfirm.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Đang xác thực...';
-                btnConfirm.disabled = true;
-
-                executeOrderPlacement();
+                const btnConfirmModal = document.getElementById('btnConfirmPayment');
+                btnConfirmModal.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Đang xác thực...';
+                btnConfirmModal.disabled = true;
+                
+                // Giả lập độ trễ ngân hàng 2.5 giây 
+                setTimeout(() => {
+                    executeOrderPlacement();
+                }, 2500);
             });
 
-            // Khởi động
             renderOrderSummary();
         });
     </script>
