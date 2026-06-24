@@ -6,112 +6,117 @@
     <title>Quản lý Khuyến mãi - Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <style>
+        .sidebar { min-height: 100vh; background-color: #343a40; }
+        .sidebar a { color: #cfd8dc; text-decoration: none; padding: 15px; display: block; }
+        .sidebar a:hover, .sidebar a.active { background-color: #495057; color: #fff; }
+    </style>
 </head>
-<body class="bg-light">
+<body class="bg-light" style="display: none;"> 
 
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow">
-        <div class="container-fluid">
-            <a class="navbar-brand fw-bold text-warning" href="admin-dashboard.html">Admin Panel</a>
-            <div class="collapse navbar-collapse">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item"><a class="nav-link" href="admin-dashboard.html">Thống kê</a></li>
-                    <li class="nav-item"><a class="nav-link" href="admin-products.html">Sản phẩm</a></li>
-                    <li class="nav-item"><a class="nav-link" href="admin-orders.html">Đơn hàng</a></li>
-                    <li class="nav-item"><a class="nav-link active" href="admin-vouchers.html">Khuyến mãi</a></li>
-                </ul>
-                <a href="index.html" class="btn btn-outline-light btn-sm">Xem trang khách</a>
+    <div class="d-flex">
+        
+        <div id="admin-sidebar-placeholder"></div>
+
+        <div class="flex-grow-1 p-4">
+            
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="fw-bold mb-0">Quản lý Mã Giảm Giá (Voucher)</h2>
             </div>
-        </div>
-    </nav>
 
-    <div class="container-fluid mt-4 px-4">
-        <h2 class="fw-bold mb-4">Quản lý Mã Giảm Giá (Voucher)</h2>
+            <div id="mainAlert" class="alert d-none" role="alert"></div>
 
-        <div class="row">
-            <div class="col-md-4">
-                <div class="card shadow-sm border-0 mb-4">
-                    <div class="card-header bg-primary text-white fw-bold">Tạo mã Voucher mới</div>
-                    <div class="card-body">
-                        <form id="voucherForm">
-                            <div class="mb-3">
-                                <label class="form-label fw-bold">Mã Voucher (Code)</label>
-                                <input type="text" id="txtCode" class="form-control text-uppercase" required placeholder="VD: FREESHIP, TET2026">
-                            </div>
-                            
-                            <div class="row mb-3">
-                                <div class="col-6">
-                                    <label class="form-label">Loại giảm</label>
-                                    <select id="selType" class="form-select" onchange="toggleMaxDiscount()">
-                                        <option value="TienMat">Trừ tiền (VNĐ)</option>
-                                        <option value="PhanTram">Phần trăm (%)</option>
-                                    </select>
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card shadow-sm border-0 mb-4">
+                        <div class="card-header bg-primary text-white fw-bold">Tạo mã Voucher mới</div>
+                        <div class="card-body">
+                            <form id="voucherForm">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">Mã Voucher (Code)</label>
+                                    <input type="text" id="txtCode" class="form-control text-uppercase" required placeholder="VD: FREESHIP, TET2026">
                                 </div>
-                                <div class="col-6">
-                                    <label class="form-label">Giá trị</label>
-                                    <input type="number" id="txtValue" class="form-control" required placeholder="VD: 15000">
+                                
+                                <div class="row mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label">Loại giảm</label>
+                                        <select id="selType" class="form-select" onchange="toggleMaxDiscount()">
+                                            <option value="TienMat">Trừ tiền (VNĐ)</option>
+                                            <option value="PhanTram">Phần trăm (%)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label">Giá trị</label>
+                                        <input type="number" id="txtValue" class="form-control" required placeholder="VD: 15000">
+                                    </div>
                                 </div>
-                            </div>
 
-                            <div class="mb-3 d-none" id="boxMaxDiscount">
-                                <label class="form-label text-danger">Giảm tối đa (VNĐ) <small>(Nếu giảm %)</small></label>
-                                <input type="number" id="txtMaxDiscount" class="form-control" placeholder="VD: 30000">
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label">Đơn tối thiểu áp dụng (VNĐ)</label>
-                                <input type="number" id="txtMinOrder" class="form-control" required value="0">
-                            </div>
-
-                            <div class="row mb-3">
-                                <div class="col-6">
-                                    <label class="form-label">Giới hạn số lượng</label>
-                                    <input type="number" id="txtUsageLimit" class="form-control" required value="100">
+                                <div class="mb-3 d-none" id="boxMaxDiscount">
+                                    <label class="form-label text-danger">Giảm tối đa (VNĐ) <small>(Nếu giảm %)</small></label>
+                                    <input type="number" id="txtMaxDiscount" class="form-control" placeholder="VD: 30000">
                                 </div>
-                                <div class="col-6"></div>
-                            </div>
 
-                            <div class="row mb-4">
-                                <div class="col-6">
-                                    <label class="form-label">Ngày bắt đầu</label>
-                                    <input type="datetime-local" id="txtStartDate" class="form-control" required>
+                                <div class="row mb-3">
+                                    <div class="col-6">
+                                        <label class="form-label">Đơn tối thiểu</label>
+                                        <input type="number" id="txtMinOrder" class="form-control" required value="0">
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label">Giới hạn SL</label>
+                                        <input type="number" id="txtUsageLimit" class="form-control" required value="100">
+                                    </div>
                                 </div>
-                                <div class="col-6">
-                                    <label class="form-label">Ngày kết thúc</label>
-                                    <input type="datetime-local" id="txtEndDate" class="form-control" required>
-                                </div>
-                            </div>
 
-                            <button type="submit" class="btn btn-success w-100 fw-bold"><i class="fas fa-plus"></i> PHÁT HÀNH MÃ</button>
-                        </form>
+                                <div class="row mb-4">
+                                    <div class="col-6">
+                                        <label class="form-label">Ngày bắt đầu</label>
+                                        <input type="datetime-local" id="txtStartDate" class="form-control" required>
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label">Ngày kết thúc</label>
+                                        <input type="datetime-local" id="txtEndDate" class="form-control" required>
+                                    </div>
+                                </div>
+
+                                <button type="submit" class="btn btn-success w-100 fw-bold"><i class="fas fa-plus"></i> PHÁT HÀNH MÃ</button>
+                            </form>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <div class="col-md-8">
-                <div class="card shadow-sm border-0">
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Mã Voucher</th>
-                                        <th>Mức giảm</th>
-                                        <th>Điều kiện</th>
-                                        <th>Đã dùng</th>
-                                        <th>Thời hạn</th>
-                                        <th>Trạng thái</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="voucherTableBody">
+                <div class="col-md-8">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th class="ps-3">Mã Voucher</th>
+                                            <th>Mức giảm</th>
+                                            <th>Điều kiện</th>
+                                            <th>Đã dùng</th>
+                                            <th>Thời hạn</th>
+                                            <th class="text-center" style="min-width: 120px;">Trạng thái</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="voucherTableBody">
+                                        <tr><td colspan="6" class="text-center py-4">Đang tải dữ liệu...</td></tr>
                                     </tbody>
-                            </table>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+            
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script src="admin-common.js"></script>
+    
     <script>
         // Kiểm tra quyền
         const token = localStorage.getItem('bakery_token');

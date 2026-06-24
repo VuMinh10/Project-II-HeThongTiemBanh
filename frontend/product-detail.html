@@ -84,7 +84,7 @@
 
     <script>
         let currentProduct = null;
-        let cart = JSON.parse(localStorage.getItem('bakery_cart')) || [];
+        let cart = JSON.parse(sessionStorage.getItem('bakery_cart')) || [];
         updateCartBadge();
 
         const urlParams = new URLSearchParams(window.location.search);
@@ -176,7 +176,7 @@
                 });
             }
 
-            localStorage.setItem('bakery_cart', JSON.stringify(cart));
+            sessionStorage.setItem('bakery_cart', JSON.stringify(cart));
             updateCartBadge();
             showToast(`Đã thêm ${qtyToAdd} chiếc ${currentProduct.ProductName} vào giỏ hàng!`, 'bg-success text-white');
         });

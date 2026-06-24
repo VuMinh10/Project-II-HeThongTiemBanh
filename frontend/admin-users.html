@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý Tài khoản - Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <style>
+        .sidebar { min-height: 100vh; background-color: #343a40; }
+        .sidebar a { color: #cfd8dc; text-decoration: none; padding: 15px; display: block; }
+        .sidebar a:hover, .sidebar a.active { background-color: #495057; color: #fff; }
+    </style>
+</head>
+<body class="bg-light" style="display: none;"> 
+
+    <div class="d-flex">
+        
+        <div id="admin-sidebar-placeholder"></div>
+
+        <div class="flex-grow-1 p-4">
+            
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="fw-bold mb-0">Quản lý Tài khoản</h2>
+                
+                <div class="input-group shadow-sm" style="max-width: 300px;">
+                    <input type="text" id="searchUser" class="form-control" placeholder="Tìm tên, sđt..." onkeyup="filterUsers()">
+                    <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                </div>
+            </div>
+
+            <div id="mainAlert" class="alert d-none" role="alert"></div>
+
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th class="ps-3">ID</th>
+                                    <th>Khách hàng</th>
+                                    <th>Liên hệ</th>
+                                    <th>Tổng chi tiêu</th>
+                                    <th>Vai trò</th>
+                                    <th>Trạng thái</th>
+                                    <th class="text-center" style="min-width: 200px;">Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody id="userTableBody">
+                                <tr><td colspan="7" class="text-center py-4">Đang tải dữ liệu...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script src="admin-common.js"></script>
+
+    <script>
+        // Bảo mật và khởi tạo biến
+        const token = localStorage.getItem('bakery_token');
+        const userRaw = localStorage.getItem('bakery_user');
+
+        if (!token || !userRaw) {
+            window.location.replace('login.html');
+        }
+
+        const currentAdmin = JSON.parse(userRaw);
+        if (currentAdmin.roleId !== 2) {
+            alert('Truy cập bị từ chối!');
+            window.location.replace('index.html');
+        }
+
+        let allUsers = [];
+
+        // 1. Tải danh sách Tài khoản 
+        async function loadUsers() {
+            try {
+                const res = await fetch('http://localhost:3000/api/admin/users', {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${token}` } // Thêm Token vào đây
+                });
+                if (!res.ok) throw new Error('Không có quyền truy cập');
+                
+                allUsers = await res.json();
+                renderUsers(allUsers);
+            } catch (error) {
+                alert('Lỗi: Phiên đăng nhập hết hạn hoặc không có quyền!');
+                if (error.message.includes('quyền')) window.location.replace('login.html');
+            }
+        }
+
+        // 2. Vẽ bảng người dùng
+        function renderUsers(users) {
+            const tbody = document.getElementById('userTableBody');
+            tbody.innerHTML = '';
+
+            if (users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Không tìm thấy tài khoản nào.</td></tr>';
+                return;
+            }
+
+            users.forEach(u => {
+                const isMe = u.UserID === currentAdmin.userId; // Kiểm tra xem dòng này có phải là chính mình không
+                const isVip = Number(u.TotalSpent) >= 1000000;
+                const vipBadge = isVip ? '<span class="badge bg-warning text-dark ms-2"><i class="fas fa-crown"></i> VIP</span>' : '';
+
+                // Xác định vai trò
+                let roleBadge = '';
+                if (u.RoleID === 2) roleBadge = '<span class="badge bg-primary">Quản trị viên</span>';
+                else if (u.RoleID === 3) roleBadge = '<span class="badge bg-success">Nhân viên POS</span>';
+                else roleBadge = '<span class="badge bg-secondary">Khách hàng</span>';
+
+                // Xác định trạng thái
+                const isLocked = u.Status === 'Bị khóa';
+                const statusBadge = isLocked 
+                    ? '<span class="badge bg-danger">Bị khóa</span>' 
+                    : '<span class="badge bg-success">Hoạt động</span>';
+
+                // Render Nút Bấm (Khóa luôn các nút nếu là tài khoản của chính mình)
+                let actionBtns = '';
+                if (isMe) {
+                    actionBtns = `<button class="btn btn-sm btn-outline-secondary w-100 disabled" disabled>Tài khoản của bạn</button>`;
+                } else {
+                    const lockBtn = isLocked
+                        ? `<button class="btn btn-sm btn-success w-100 mb-1" onclick="updateStatus(${u.UserID}, 'Hoạt động')"><i class="fas fa-unlock"></i> Mở khóa</button>`
+                        : `<button class="btn btn-sm btn-danger w-100 mb-1" onclick="updateStatus(${u.UserID}, 'Bị khóa')"><i class="fas fa-lock"></i> Khóa Acc</button>`;
+
+                    let roleBtn = '';
+                    if (u.RoleID === 2) {
+                        roleBtn = `<button class="btn btn-sm btn-outline-danger w-100" onclick="updateRole(${u.UserID}, 1)">Giáng quyền</button>`;
+                    } else if (u.RoleID === 3) {
+                        roleBtn = `<button class="btn btn-sm btn-outline-primary w-100" onclick="updateRole(${u.UserID}, 2)">Lên Admin</button>
+                                   <button class="btn btn-sm btn-outline-secondary w-100 mt-1" onclick="updateRole(${u.UserID}, 1)">Xuống Khách</button>`;
+                    } else {
+                        roleBtn = `<button class="btn btn-sm btn-outline-success w-100" onclick="updateRole(${u.UserID}, 3)">Lên Nhân viên</button>`;
+                    }
+                    actionBtns = lockBtn + roleBtn;
+                }
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="ps-3 fw-bold text-muted">#${u.UserID}</td>
+                    <td>
+                        <div class="fw-bold">${u.FullName || 'Chưa cập nhật'} ${vipBadge} ${isMe ? '<span class="badge bg-info text-dark ms-1">Bạn</span>' : ''}</div>
+                        <small class="text-muted">${u.TotalOrders} đơn hàng</small>
+                    </td>
+                    <td>
+                        <div><i class="fas fa-envelope text-muted"></i> ${u.Email}</div>
+                        <div><i class="fas fa-phone text-muted"></i> ${u.Phone || 'N/A'}</div>
+                    </td>
+                    <td class="fw-bold ${isVip ? 'text-danger' : 'text-dark'}">${Number(u.TotalSpent).toLocaleString('vi-VN')} ₫</td>
+                    <td>${roleBadge}</td>
+                    <td>${statusBadge}</td>
+                    <td class="text-center" style="width: 150px;">
+                        ${actionBtns}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        // 3. API đổi Trạng thái 
+        async function updateStatus(userId, newStatus) {
+            if(!confirm(`Bạn chắc chắn muốn chuyển tài khoản này sang trạng thái: ${newStatus}?`)) return;
+            try {
+                const res = await fetch(`http://localhost:3000/api/admin/users/${userId}/status`, {
+                    method: 'PUT',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}` 
+                    },
+                    body: JSON.stringify({ status: newStatus })
+                });
+                
+                const result = await res.json();
+                if (res.ok) {
+                    loadUsers(); 
+                } else {
+                    alert('Lỗi: ' + result.error);
+                }
+            } catch (error) { alert('Lỗi kết nối máy chủ'); }
+        }
+
+        // 4. API phân quyền 
+        async function updateRole(userId, newRoleId) {
+            let roleName = 'Khách hàng';
+            if(newRoleId === 2) roleName = 'Admin';
+            if(newRoleId === 3) roleName = 'Nhân viên POS';
+
+            if(!confirm(`Cấp quyền [${roleName}] cho tài khoản này?`)) return;
+            try {
+                const res = await fetch(`http://localhost:3000/api/admin/users/${userId}/role`, {
+                    method: 'PUT',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}` 
+                    },
+                    body: JSON.stringify({ roleId: newRoleId })
+                });
+                
+                const result = await res.json();
+                if (res.ok) {
+                    loadUsers(); 
+                } else {
+                    alert('Lỗi: ' + result.error);
+                }
+            } catch (error) { alert('Lỗi kết nối máy chủ'); }
+        }
+
+        // Lọc tìm kiếm nhanh
+        function filterUsers() {
+            const kw = document.getElementById('searchUser').value.toLowerCase().trim();
+            
+            const filtered = allUsers.filter(u => {
+                // 1. Kiểm tra Tên (Bỏ qua nếu null)
+                const matchName = u.FullName && u.FullName.toLowerCase().includes(kw);
+                
+                // 2. Kiểm tra SĐT (Ép kiểu String để chống lỗi nếu CSDL lưu là dạng Số)
+                const matchPhone = u.Phone && String(u.Phone).includes(kw);
+                
+                // 3. Kiểm tra Email (Bỏ qua nếu null)
+                const matchEmail = u.Email && u.Email.toLowerCase().includes(kw);
+                
+                // Trả về true nếu khớp 1 trong 3 điều kiện trên
+                return matchName || matchPhone || matchEmail;
+            });
+            
+            renderUsers(filtered);
+        }
+
+        loadUsers();
+    </script>
+</body>
+</html>

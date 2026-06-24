@@ -150,6 +150,11 @@ app.post('/api/login', async (req, res) => {
             return res.status(401).json({ error: 'Tài khoản hoặc mật khẩu không chính xác.' });
         }
 
+        // Chặn tài khoản bị khóa
+        if (user.Status === 'Bị khóa') {
+            return res.status(403).json({ error: 'Tài khoản của bạn đã bị khóa do vi phạm. Vui lòng liên hệ Admin!' });
+        }
+
         // 4. Tạo JWT Token
         const token = jwt.sign(
             { userId: user.UserID, roleId: user.RoleID },
@@ -913,7 +918,7 @@ app.get('/api/admin/statistics', authenticateToken, isAdmin, async (req, res) =>
         // 4. Thống kê Voucher
         const [voucherStats] = await pool.execute(`
             SELECT VoucherCode, COUNT(OrderID) as UsageCount 
-            FROM \`Order\` WHERE VoucherCode IS NOT NULL AND Status = 'Đã hoàn thành'
+            FROM \`Order\` WHERE VoucherCode IS NOT NULL AND Status != 'Đã hủy'
             GROUP BY VoucherCode ORDER BY UsageCount DESC
         `);
 
@@ -939,6 +944,84 @@ app.get('/api/admin/statistics', authenticateToken, isAdmin, async (req, res) =>
     } catch (error) {
         console.error('[Admin Dashboard Stats Error]:', error);
         res.status(500).json({ error: 'Lỗi truy xuất dữ liệu báo cáo' });
+    }
+});
+
+// -- API quản lý tài khoản (Admin) --
+
+// 1. Lấy danh sách người dùng kèm Thống kê chi tiêu
+app.get('/api/admin/users', authenticateToken, isAdmin, async (req, res) => {
+    try {
+        const sql = `
+            SELECT u.UserID, u.FullName, u.Email, u.Phone, u.RoleID, u.Status,
+                   COUNT(o.OrderID) as TotalOrders,
+                   COALESCE(SUM(o.TotalAmount), 0) as TotalSpent
+            FROM User u
+            LEFT JOIN \`Order\` o ON u.UserID = o.UserID AND o.Status = 'Đã hoàn thành'
+            GROUP BY u.UserID
+            ORDER BY TotalSpent DESC, u.UserID DESC
+        `;
+        const [users] = await pool.execute(sql);
+        res.status(200).json(users);
+    } catch (error) {
+        console.error('[Get Users Error]:', error);
+        res.status(500).json({ error: 'Lỗi khi tải danh sách người dùng' });
+    }
+});
+
+// 2. Cập nhật Trạng thái (Khóa / Mở khóa)
+app.put('/api/admin/users/:id/status', authenticateToken, isAdmin, async (req, res) => {
+    const targetUserId = parseInt(req.params.id);
+    const { status } = req.body;
+
+    // Kiểm tra dữ liệu hợp lệ
+    const validStatuses = ['Hoạt động', 'Bị khóa'];
+    if (!validStatuses.includes(status)) {
+        return res.status(400).json({ error: 'Trạng thái không hợp lệ!' });
+    }
+
+    // Chống Admin tự khóa chính mình
+    if (targetUserId === req.user.userId) { 
+        return res.status(403).json({ error: 'Bạn không thể tự khóa tài khoản của chính mình!' });
+    }
+
+    try {
+        const [result] = await pool.execute('UPDATE User SET Status = ? WHERE UserID = ?', [status, targetUserId]);
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Không tìm thấy người dùng này!' });
+        }
+        res.status(200).json({ message: `Đã cập nhật trạng thái thành ${status}` });
+    } catch (error) {
+        console.error('[Update Status Error]:', error);
+        res.status(500).json({ error: 'Lỗi khi cập nhật trạng thái' });
+    }
+});
+
+// 3. Phân quyền (RoleID: 1 = Khách, 2 = Admin, 3 = Nhân viên POS)
+app.put('/api/admin/users/:id/role', authenticateToken, isAdmin, async (req, res) => {
+    const targetUserId = parseInt(req.params.id);
+    const { roleId } = req.body;
+
+    // Kiểm tra quyền hợp lệ
+    const validRoles = [1, 2, 3];
+    if (!validRoles.includes(parseInt(roleId))) {
+        return res.status(400).json({ error: 'Quyền (RoleID) không hợp lệ!' });
+    }
+
+    // Chống Admin tự giáng quyền chính mình
+    if (targetUserId === req.user.userId) {
+        return res.status(403).json({ error: 'Bạn không thể tự thay đổi quyền của chính mình!' });
+    }
+
+    try {
+        const [result] = await pool.execute('UPDATE User SET RoleID = ? WHERE UserID = ?', [roleId, targetUserId]);
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Không tìm thấy người dùng này!' });
+        }
+        res.status(200).json({ message: 'Phân quyền thành công!' });
+    } catch (error) {
+        console.error('[Update Role Error]:', error);
+        res.status(500).json({ error: 'Lỗi khi phân quyền' });
     }
 });
 

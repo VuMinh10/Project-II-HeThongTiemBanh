@@ -27,7 +27,7 @@
         <div class="container-fluid">
             <a class="navbar-brand fw-bold" href="#"><i class="fas fa-cash-register"></i> Màn hình Thu Ngân (POS)</a>
             <div class="d-flex">
-                <a href="admin-orders.html" class="btn btn-light btn-sm me-2">Quản lý giao dịch</a>
+                <a href="admin-dashboard.html" id="btnDashboard" class="btn btn-light btn-sm me-2 d-none">Tổng quan</a>
                 <a href="index.html" class="btn btn-outline-light btn-sm">Về trang khách</a>
             </div>
         </div>
@@ -120,6 +120,10 @@
         if (userInfo.roleId === 1) {
             alert('Truy cập bị từ chối: Chỉ dành cho Thu ngân / Quản trị viên!');
             window.location.replace('index.html');
+        }
+
+        if (Number(userInfo.roleId) === 2) {
+            document.getElementById('btnDashboard').classList.remove('d-none');
         }
 
         let allProducts = [];

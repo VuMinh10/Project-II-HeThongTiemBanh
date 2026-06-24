@@ -6,35 +6,44 @@
     <title>Quản lý Danh mục - Admin</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <style>
+        .sidebar { min-height: 100vh; background-color: #343a40; }
+        .sidebar a { color: #cfd8dc; text-decoration: none; padding: 15px; display: block; }
+        .sidebar a:hover, .sidebar a.active { background-color: #495057; color: #fff; }
+    </style>
 </head>
-<body class="bg-light" style="display: none;"> <div class="container mt-4">
-        <a href="admin-dashboard.html" class="text-decoration-none text-secondary mb-3 d-inline-block custom-back-btn">
-            <i class="fas fa-arrow-left me-1"></i> Quay lại Bảng điều khiển
-        </a>
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2>Quản lý Danh mục Sản phẩm</h2>
-            <button class="btn btn-primary" id="btnOpenAddModal">
-                <i class="fas fa-plus"></i> Thêm Danh Mục Mới
-            </button>
-        </div>
+<body class="bg-light" style="display: none;"> 
 
-        <div id="mainAlert" class="alert d-none" role="alert"></div>
+    <div class="d-flex">
+        <div id="admin-sidebar-placeholder"></div>
 
-        <div class="card shadow">
-            <div class="card-body">
-                <table class="table table-hover align-middle">
-                    <thead class="table-dark">
-                        <tr>
-                            <th width="10%">ID</th>
-                            <th width="30%">Tên Danh Mục</th>
-                            <th width="40%">Mô Tả</th>
-                            <th width="20%">Hành Động</th>
-                        </tr>
-                    </thead>
-                    <tbody id="categoryTableBody">
-                        <tr><td colspan="4" class="text-center">Đang tải dữ liệu...</td></tr>
-                    </tbody>
-                </table>
+        <div class="flex-grow-1 p-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="fw-bold mb-0">Quản lý Danh mục Sản phẩm</h2>
+                <button class="btn btn-primary" id="btnOpenAddModal">
+                    <i class="fas fa-plus"></i> Thêm Danh Mục Mới
+                </button>
+            </div>
+
+            <div id="mainAlert" class="alert d-none" role="alert"></div>
+
+            <div class="card shadow border-0">
+                <div class="card-body p-0">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th width="10%" class="ps-3">ID</th>
+                                <th width="30%">Tên Danh Mục</th>
+                                <th width="40%">Mô Tả</th>
+                                <th width="20%">Hành Động</th>
+                            </tr>
+                        </thead>
+                        <tbody id="categoryTableBody">
+                            <tr><td colspan="4" class="text-center py-4">Đang tải dữ liệu...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -67,6 +76,8 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script src="admin-common.js"></script>
     
     <script>
         const token = localStorage.getItem('bakery_token');
@@ -83,12 +94,6 @@
         }
 
         document.addEventListener('DOMContentLoaded', () => {
-            // Kiểm tra token
-            if (!token) {
-                window.location.replace('/login.html');
-                return;
-            }
-            document.body.style.display = 'block';
             modal = new bootstrap.Modal(document.getElementById('categoryModal'));
             loadCategories();
         });

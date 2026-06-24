@@ -148,7 +148,7 @@
             const userInfo = JSON.parse(userRaw);
 
             // 2. Khởi tạo dữ liệu
-            let cart = JSON.parse(localStorage.getItem('bakery_cart')) || [];
+            let cart = JSON.parse(sessionStorage.getItem('bakery_cart')) || [];
             let totalAmount = 0; // Tiền gốc
             let discountAmount = 0; // Tiền được giảm
             let appliedVoucherCode = null; // Mã đang áp dụng
@@ -303,7 +303,7 @@
 
                     if (response.ok) {
                         alert('🎉 Đặt hàng thành công!');
-                        localStorage.removeItem('bakery_cart'); 
+                        sessionStorage.removeItem('bakery_cart'); 
                         window.location.replace('order-history.html'); 
                     } else {
                         alert('Lỗi: ' + result.error);
