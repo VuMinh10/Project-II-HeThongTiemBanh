@@ -4,6 +4,8 @@ const mysql = require('mysql2/promise');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
+
 
 /--------/
 const path = require('path'); // Gọi thư viện đường dẫn
@@ -176,28 +178,6 @@ app.post('/api/login', async (req, res) => {
 
     } catch (error) {
         console.error('[Login API Error]:', error);
-        res.status(500).json({ error: 'Lỗi máy chủ nội bộ. Vui lòng thử lại sau.' });
-    }
-});
-
-// -- API lấy profile -- (XXX)
-app.get('/api/profile', authenticateToken, async (req, res) => {
-    try {
-        const sql = 'SELECT UserID, Username, FullName, Phone, Email FROM User WHERE UserID = ?';
-        const [users] = await pool.execute(sql, [req.user.userId]);
-
-        // Phòng trường hợp token chưa hết hạn nhưng tài khoản ko còn
-        if (users.length === 0) {
-            return res.status(404).json({ error: 'Không tìm thấy thông tin người dùng.' });
-        }
-
-        res.status(200).json({
-            message: 'Lấy thông tin thành công',
-            profile: users[0]
-        });
-
-    } catch (error) {
-        console.error('[Profile API Error]:', error);
         res.status(500).json({ error: 'Lỗi máy chủ nội bộ. Vui lòng thử lại sau.' });
     }
 });
@@ -497,6 +477,7 @@ app.get('/api/profile', authenticateToken, async (req, res) => {
         const sql = 'SELECT UserID, Username, FullName, Phone, Email, RoleID FROM User WHERE UserID = ?';
         const [users] = await pool.execute(sql, [userId]);
         
+        // Phòng trường hợp token chưa hết hạn nhưng tài khoản đã bị Admin xóa khỏi Database
         if (users.length === 0) {
             return res.status(404).json({ error: 'Không tìm thấy hồ sơ người dùng!' });
         }
@@ -639,7 +620,7 @@ app.post('/api/orders', authenticateToken, async (req, res) => {
         
         const newOrderId = orderResult.insertId; 
 
-        // 4. Lưu datail và trừ tồn kho
+        // 4. Lưu detail và trừ tồn kho
         for (let item of processedItems) {
             await connection.execute(
                 `INSERT INTO OrderDetail (OrderID, ProductID, Quantity, UnitPrice, SubTotal) VALUES (?, ?, ?, ?, ?)`, 
@@ -710,6 +691,7 @@ app.put('/api/admin/orders/:id/status', authenticateToken, isAdmin, async (req, 
 
         if (Status === 'Đã hủy') {
             const [details] = await connection.execute('SELECT ProductID, Quantity FROM OrderDetail WHERE OrderID = ?', [orderId]);
+            // Cộng lại đơn hàng đã hủy vào kho
             for (let item of details) {
                 await connection.execute(
                     'UPDATE Product SET QuantityAvailable = QuantityAvailable + ? WHERE ProductID = ?', 
@@ -749,6 +731,7 @@ app.get('/api/admin/orders/:id/details', authenticateToken, isAdmin, async (req,
 });
 
 // -- API lịch sử đơn hàng cho khách hàng --
+
 // 1. Láy danh sách đơn hàng
 app.get('/api/orders/history', authenticateToken, async (req, res) => {
     try {
@@ -794,7 +777,7 @@ app.get('/api/orders/:id/details', authenticateToken, async (req, res) => {
     }
 });
 
-// -- API Quản lý voucher và Khuyến mãi --
+// -- API Quản lý voucher và Khuyến mãi (admin) --
 
 // 1. Thêm Voucher mới 
 app.post('/api/admin/vouchers', authenticateToken, isAdmin, async (req, res) => {
@@ -1022,6 +1005,97 @@ app.put('/api/admin/users/:id/role', authenticateToken, isAdmin, async (req, res
     } catch (error) {
         console.error('[Update Role Error]:', error);
         res.status(500).json({ error: 'Lỗi khi phân quyền' });
+    }
+});
+
+// -- API lấy lại mật khẩu --
+
+// 1. Khởi tạo Transporter ở ngoài Route để tái sử dụng
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_APP_PASSWORD 
+    }
+});
+
+// 2. Tạo token và gửi mail
+app.post('/api/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    
+    try {
+        const [users] = await pool.execute('SELECT UserID, Email, Password FROM User WHERE Email = ?', [email]);
+        
+        // BẢO MẬT: Không bao giờ báo cho client biết email có tồn tại hay không
+        if (users.length > 0) {
+            const user = users[0];
+
+            // BẢO MẬT: Gắn chuỗi hash mật khẩu cũ vào secret. Đổi pass xong token tự huỷ.
+            const secret = process.env.JWT_SECRET + user.Password;
+            
+            const resetToken = jwt.sign(
+                { userId: user.UserID },
+                secret,
+                { expiresIn: '15m' }
+            );
+
+            // Dùng biến môi trường cho URL client
+            const resetLink = `${process.env.CLIENT_URL}/reset-password.html?token=${resetToken}&id=${user.UserID}`;
+
+            await transporter.sendMail({
+                from: '"Tiệm Bánh Ngọt" <no-reply@tiembanh.com>',
+                to: email,
+                subject: 'Yêu cầu khôi phục mật khẩu',
+                html: `<p>Bạn vừa yêu cầu đặt lại mật khẩu.</p>
+                       <p>Vui lòng bấm vào link dưới đây để đặt lại (Link hết hạn trong 15 phút):</p>
+                       <a href="${resetLink}">Khôi phục mật khẩu ngay</a>`
+            });
+        }
+
+        // Luôn trả về thành công dù email có hay không
+        res.status(200).json({ message: 'Nếu email tồn tại, link khôi phục đã được gửi. Vui lòng kiểm tra hộp thư.' });
+
+    } catch (error) {
+        console.error('Forgot Password Error:', error);
+        res.status(500).json({ error: 'Lỗi hệ thống khi xử lý yêu cầu.' });
+    }
+});
+
+// 3. Đặt lại mật khẩu
+app.post('/api/reset-password', async (req, res) => {
+    // Cần truyền thêm userId từ frontend để lấy ra secret tương ứng
+    const { token, userId, newPassword } = req.body;
+
+    if (!token || !userId || !newPassword) {
+        return res.status(400).json({ error: 'Dữ liệu không hợp lệ.' });
+    }
+
+    try {
+        const [users] = await pool.execute('SELECT UserID, Password FROM User WHERE UserID = ?', [userId]);
+        if (users.length === 0) {
+            return res.status(400).json({ error: 'Người dùng không tồn tại.' });
+        }
+
+        const user = users[0];
+        const secret = process.env.JWT_SECRET + user.Password;
+
+        // Giải mã Token với secret động
+        const decoded = jwt.verify(token, secret);
+
+        // Băm mật khẩu mới
+        const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+        // Cập nhật DB
+        await pool.execute('UPDATE User SET Password = ? WHERE UserID = ?', [hashedPassword, decoded.userId]);
+
+        res.status(200).json({ message: 'Đổi mật khẩu thành công! Vui lòng đăng nhập lại.' });
+
+    } catch (error) {
+        if (error.name === 'TokenExpiredError' || error.name === 'JsonWebTokenError') {
+            return res.status(403).json({ error: 'Đường link khôi phục đã hết hạn, không hợp lệ hoặc đã được sử dụng.' });
+        }
+        console.error('Reset Password Error:', error);
+        res.status(500).json({ error: 'Lỗi máy chủ.' });
     }
 });
 

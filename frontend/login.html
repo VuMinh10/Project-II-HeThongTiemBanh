@@ -1,33 +1,38 @@
-<!DOCTYPE html> //XXX
+<!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Đăng nhập - Tiệm Bánh Ngọt</title>
+    <title>Đăng nhập - SweetBakery</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light d-flex align-items-center justify-content-center" style="height: 100vh;">
 
     <div class="card shadow p-4" style="width: 400px; border-radius: 15px;">
-        <h3 class="text-center text-primary mb-4">🎂 Tiệm Bánh</h3>
+        <h3 class="text-center text-primary mb-4">SweetBakery</h3>
         
         <div id="errorAlert" class="alert alert-danger d-none" role="alert"></div>
 
         <form id="loginForm">
             <div class="mb-3">
-                <label class="form-label">Tài khoản</label>
+                <label class="form-label fw-bold">Tài khoản</label>
                 <input type="text" class="form-control" id="username" required>
             </div>
-            <div class="mb-3">
-                <label class="form-label">Mật khẩu</label>
+            
+            <div class="mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label fw-bold mb-0">Mật khẩu</label>
+                    <a href="forgot-password.html" class="text-decoration-none small text-primary fw-bold">Quên mật khẩu?</a>
+                </div>
                 <input type="password" class="form-control" id="password" required>
             </div>
             
-            <button type="submit" id="btnLogin" class="btn btn-primary w-100">Đăng Nhập</button>
+            <button type="submit" id="btnLogin" class="btn btn-primary w-100 fw-bold">Đăng Nhập</button>
         </form>
 
         <div class="text-center mt-3">
-            <a href="register.html" class="text-decoration-none">Chưa có tài khoản? Đăng ký ngay</a>
+            <span class="text-muted small">Chưa có tài khoản?</span> 
+            <a href="register.html" class="text-decoration-none small fw-bold">Đăng ký ngay</a>
         </div>
     </div>
 
@@ -49,7 +54,6 @@
                 const response = await fetch('http://localhost:3000/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    // Chữ thường chuẩn chỉnh khớp với Backend
                     body: JSON.stringify({ username, password }) 
                 });
 

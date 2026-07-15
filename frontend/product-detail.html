@@ -82,6 +82,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
+    <script src="common.js"></script>
+
     <script>
         let currentProduct = null;
         let cart = JSON.parse(sessionStorage.getItem('bakery_cart')) || [];
@@ -181,10 +183,10 @@
             showToast(`Đã thêm ${qtyToAdd} chiếc ${currentProduct.ProductName} vào giỏ hàng!`, 'bg-success text-white');
         });
 
-        function updateCartBadge() {
+        /*function updateCartBadge() {
             const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
             document.getElementById('cartBadge').innerText = totalItems;
-        }
+        }*/
 
         function showToast(message, colorClass) {
             const toastEl = document.getElementById('cartToast');
